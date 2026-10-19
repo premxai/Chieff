@@ -45,6 +45,7 @@ SIMILARITY = 0.6  # how alike two web-search requests must be to share a cached 
 _MAX_SNIPPET = 600
 _MAX_EXCERPT = 1000
 _MAX_EXCERPTS = 8
+_MAX_PAGE_TEXT = 120_000  # a whole timetable page (about 60 KB), kept so the trip parser can run from the cache
 _MAX_TITLE = 300
 _MAX_RESULTS = 50
 
@@ -135,6 +136,8 @@ def normalize_args(tool: str, args: dict) -> dict:
             "queries": [_squash(q) for q in (args.get("queries") or [])],
             "max_results": int(args.get("max_results") or 5),
         }
+    if tool == "extract_page":
+        return {"url": str(args["url"]).strip().lower()}  # the same page is the same answer, whatever the objective
     if tool == "read_health":
         return {"days": int(args.get("days") or 14)}
     raise ValueError(f"{tool} is not a read tool and is never cached")
@@ -169,6 +172,9 @@ def encode(tool: str, result: Any) -> Any:
              "excerpts": [_clip(x, _MAX_EXCERPT) for x in list(r.get("excerpts") or [])[:_MAX_EXCERPTS]]}
             for r in list(result)[:_MAX_RESULTS]
         ]
+    if tool == "extract_page":
+        return {"title": _clip(result.get("title", ""), _MAX_TITLE), "url": redact(str(result.get("url") or "")),
+                "excerpts": [_clip(x, _MAX_PAGE_TEXT) for x in list(result.get("excerpts") or [])[:1]]}
     if tool == "read_health":
         return [{"day": s.day.isoformat(), "hours": s.hours, "steps": s.steps} for s in result]
     raise ValueError(f"{tool} is not a read tool and is never cached")
@@ -185,6 +191,8 @@ def decode(tool: str, data: Any) -> Any:
                       datetime.fromisoformat(d["received"]), bool(d.get("unread", True))) for d in data]
     if tool == "search_web":
         return [{"title": d["title"], "url": d["url"], "excerpts": list(d["excerpts"])} for d in data]
+    if tool == "extract_page":
+        return {"title": data["title"], "url": data["url"], "excerpts": list(data["excerpts"])}
     if tool == "read_health":
         return [SleepDay(date.fromisoformat(d["day"]), float(d["hours"]), d.get("steps")) for d in data]
     raise ValueError(f"{tool} is not a read tool and is never cached")

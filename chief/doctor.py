@@ -29,6 +29,7 @@ TAGS = {OK: "[ OK ]", WARN: "[WARN]", FAIL: "[FAIL]", INFO: "[info]"}
 MODES = ("mock", "live", "demo", "demo-offline")
 STALE_AFTER = timedelta(hours=24)
 NET_TIMEOUT = 8.0
+COMPOSIO_TIMEOUT = 30.0  # creating a Composio session takes about 10 s; 8 s reported a healthy setup as failed
 
 # (module to import, pip name, needed for) for the `live` extra
 EXTRA_PACKAGES = [
@@ -212,7 +213,7 @@ def run_checks(cfg: Config, deps: Deps | None = None, *, live: bool = False, off
         else:
             try:
                 probe = d.composio_status or (lambda: _real_composio_status(cfg))
-                status = _timed(probe)
+                status = _timed(probe, COMPOSIO_TIMEOUT)
                 missing = sorted(k for k, ok in status.items() if not ok)
                 add("Composio connections", FAIL if missing else OK, ("NOT connected: " + ", ".join(missing)) if missing else "connected: " + ", ".join(sorted(status)),
                     "python -m chief.tools.composio_client gmail  (and: calendar), open the link signed in to the TEST Google account" if missing else "", critical=True)

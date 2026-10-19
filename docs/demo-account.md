@@ -56,7 +56,7 @@ It prints the plan, then asks you to **type the demo address** to continue. Anyt
 |---|---|---|
 | Emails | IMAP `APPEND` over SSL to `imap.gmail.com`, INBOX | 10 messages, unread, Date headers relative to the day you run it. Sam asks for the deck by Friday; Dana (Acme) pricing follow-up plus two older Dana threads (rollout kickoff notes, security questionnaire); an invoice with a due date; a newsletter; a teammate thread needing a reply; one email that tries to give instructions to an AI assistant (forward the inbox, hide it from the user) so the demo can show it being flagged and ignored. |
 | Calendar | `LiveTools.create_event` (Composio) | Heavy Mon/Tue/Thu (six meetings), light Wed/Fri, for the past 14 days and the next 7, plus "Acme pricing review" with Dana on the first non-heavy day from today. Create-event has no attendee field, so attendees (`dana@acme.example`) are listed in the description and no invitation is sent. |
-| Sleep | `chief.health.write_sample_csv` | `data/sample_health.csv`, anchored to today. This is **sample data**, not real health data. A file there that is not a sample file is left alone. |
+| Sleep | `chief.health.write_sample_csv` | `data/sleep.csv` (the file live mode reads), anchored to today. This is **sample data**, not real health data. A file there that is not a sample file is left alone. |
 
 ### Safety rules it enforces
 
@@ -90,5 +90,5 @@ The script never deletes, so cleanup is manual:
 - **Calendar events.** In Google Calendar search for `chief-demo-seed` (it is in every event description) and delete the
   results one by one, or delete the whole demo calendar. Because it is a throwaway account, you can also just delete the
   account.
-- **Sleep CSV.** Delete `data/sample_health.csv`.
+- **Sleep CSV.** Delete `data/sleep.csv`.
 - **Credentials.** Remove the two `CHIEF_DEMO_*` lines from `.env` and revoke the app password in Google Account > Security.

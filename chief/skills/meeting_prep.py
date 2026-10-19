@@ -38,6 +38,17 @@ def external_attendees(event: Event) -> list[str]:
     return [a for a in event.attendees if _domain(a) and _domain(a) not in mine]
 
 
+RESERVED_TLDS = ("example", "test", "invalid", "localhost")
+RESERVED_DOMAINS = ("example.com", "example.net", "example.org")
+
+
+def fictional(domain: str) -> bool:
+    """A domain reserved for documentation (RFC 2606), like the demo data's acme.example. No real company is behind it,
+    so a web search on its name would brief you about some unrelated real company that shares the word."""
+    d = domain.lower().rstrip(".")
+    return bool(d) and (d.rsplit(".", 1)[-1] in RESERVED_TLDS or any(d == r or d.endswith("." + r) for r in RESERVED_DOMAINS))
+
+
 def _company(domain: str) -> str:
     labels = domain.split(".")
     return (labels[-2] if len(labels) >= 2 else labels[0]).title()
@@ -82,12 +93,15 @@ def gather(ctx: Context, meeting: Event) -> Prep | None:
     company = _company(_domain(guest))
 
     threads = _history(ctx, parseaddr(guest)[1])
-    web = ctx.tools.search_web(
-        f"Find recent news and a short background on the company {company}, for someone about to meet them.",
-        [f"{company} company news", f"{company} company overview"],
-        MAX_WEB,
-    )
-    web = [r for r in web if r.get("url")][:MAX_WEB]
+    web: list[dict] = []
+    real_search = getattr(getattr(ctx.llm, "cfg", None), "mode", "mock") != "mock"  # mock search results are labelled MOCK
+    if not (real_search and fictional(_domain(guest))):
+        web = ctx.tools.search_web(
+            f"Find recent news and a short background on the company {company}, for someone about to meet them.",
+            [f"{company} company news", f"{company} company overview"],
+            MAX_WEB,
+        )
+        web = [r for r in web if r.get("url")][:MAX_WEB]
     if not threads and not web:
         return None  # nothing useful to put on the page
     return Prep(meeting, guest, company, threads, web)

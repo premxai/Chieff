@@ -6,6 +6,7 @@ only phrases the summary. The fix is a proposal: nothing changes until you appro
 
 from __future__ import annotations
 
+import re
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 
@@ -91,10 +92,14 @@ def run(ctx: Context) -> Proposal | None:
         f"{'make one a walking call, ' if walk else ''}and protect a {FOCUS_MINUTES}-minute focus block. Approve?"
     )
     summary = ctx.llm.complete(
-        "You are Chief, a dry, concise personal agent. Rewrite in at most three short sentences, keep every number.",
+        "You are Chief, a dry, concise personal agent speaking to its user. The text below is YOUR OWN draft message "
+        "to them: rewrite it in at most three short sentences, in the same voice, ending with the question of whether "
+        "to go ahead. Do not answer the question yourself, do not say yes or approve, keep every number.",
         fallback,
         fallback,
     )
+    if not set(re.findall(r"\d+", fallback)) <= set(re.findall(r"\d+", summary)) or re.match(r"\s*(yes|approved?)\b", summary, re.I):
+        summary = fallback  # the model dropped a number or answered its own question: use the plain-code text
     return Proposal(skill="audit", summary=summary, actions=actions, key=f"audit:{target.isoformat()}")
 
 

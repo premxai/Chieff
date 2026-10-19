@@ -53,6 +53,32 @@ def test_a_failing_host_falls_back_instead_of_raising():
     assert llm.chat_with_tools([], []) is None
 
 
+def _wrapped(message: dict):
+    """What the OpenAI SDK makes of Cline's {"data": {...}} reply: choices=None, payload in model_extra."""
+    return SimpleNamespace(choices=None, model_extra={"data": {"choices": [{"message": message}]}})
+
+
+def test_cline_wrapped_reply_is_unwrapped():
+    llm, comp = llm_with(None)
+    comp.create = lambda **_: _wrapped({"content": " ready "})
+    assert llm.complete("s", "u", "fallback") == "ready"
+
+
+def test_cline_wrapped_tool_calls_are_parsed():
+    llm, comp = llm_with(None)
+    tc = {"id": "c1", "function": {"name": "list_events", "arguments": "{}"}}
+    comp.create = lambda **_: _wrapped({"content": None, "tool_calls": [tc]})
+    out = llm.chat_with_tools([{"role": "user", "content": "x"}], [{"type": "function", "function": {"name": "list_events"}}])
+    assert out["tool_calls"][0]["function"]["name"] == "list_events" and out["tool_calls"][0]["id"] == "c1"
+
+
+def test_a_reply_with_no_choices_falls_back():
+    llm, comp = llm_with(None)
+    comp.create = lambda **_: SimpleNamespace(choices=None, model_extra={})
+    assert llm.complete("s", "u", "fallback") == "fallback"
+    assert llm.chat_with_tools([], []) is None
+
+
 def test_mock_mode_never_calls_the_model():
     cfg = Config(mode="mock", llm_model="m", llm_api_key="k")
     assert LLM(cfg).complete("s", "u", "fb") == "fb"

@@ -16,6 +16,26 @@ def test_prep_builds_a_brief_with_history_and_sources(rt):
     assert "MOCK" in p.summary  # the mock web result stays labelled
 
 
+def test_no_web_search_for_a_fictional_domain_outside_mock_mode(cfg, tools, cards):
+    """acme.example is a reserved documentation domain: searching for 'Acme' would brief you about an unrelated real company."""
+    from dataclasses import replace
+
+    seen = []
+    real = tools.search_web
+    tools.search_web = lambda *a, **k: seen.append(a) or real(*a, **k)
+    rt = Runtime(replace(cfg, mode="live"), tools=tools, notify=cards.append)
+    p = rt.run_skill("meeting_prep")
+    assert seen == []  # no search went out
+    assert p is not None and "Past threads" in p.summary  # the email history still makes the brief
+
+
+def test_fictional_domains():
+    from chief.skills.meeting_prep import fictional
+
+    assert all(fictional(d) for d in ("acme.example", "mail.vendor.example", "example.com", "x.test", "a.invalid"))
+    assert not any(fictional(d) for d in ("acme.com", "notexample.com", "example.company", ""))
+
+
 def test_prep_sends_only_the_company_name_to_the_web(rt, tools):
     seen = []
     real = tools.search_web

@@ -30,6 +30,7 @@ from datetime import datetime, timezone, tzinfo
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from chief import health
 from chief.config import Config
@@ -51,6 +52,7 @@ WRITE_SLUGS = {
 
 _PATCH_FIELDS = {"summary": "summary", "title": "summary", "description": "description", "location": "location"}
 _MAX_PAGES = 4
+_PAGE_CHARS = 120_000  # one whole page (a Caltrain timetable is about 60 KB)
 
 
 def _find(data: Any, key: str, depth: int = 4) -> Any:
@@ -81,6 +83,16 @@ def _first(d: dict, *keys: str) -> Any:
         if d.get(key) not in (None, ""):
             return d[key]
     return None
+
+
+_DESC_ATTENDEES = re.compile(r"Attendees:\s*([^\n]+?)\.?\s*$", re.MULTILINE)
+
+
+def _description_attendees(description: str) -> list[str]:
+    """Events made through create_event (no attendee field, e.g. the seeded demo calendar) list guests in the
+    description as 'Attendees: a@x.example, b@y.example.'; used only when Google returned no real attendees."""
+    m = _DESC_ATTENDEES.search(description or "")
+    return [a for a in re.findall(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+", m.group(1))] if m else []
 
 
 class LiveTools(Tools):
@@ -155,14 +167,21 @@ class LiveTools(Tools):
         s, e = self._parse_dt(start["dateTime"]), self._parse_dt(end.get("dateTime"))
         if s is None or e is None:
             return None
-        attendees = [a.get("email") or a.get("displayName") for a in item.get("attendees") or [] if isinstance(a, dict)]
+        # Google lists the calendar owner as an attendee of their own events (flagged "self"); that is not a guest.
+        attendees = [
+            a.get("email") or a.get("displayName")
+            for a in item.get("attendees") or []
+            if isinstance(a, dict) and not a.get("self")
+        ]
+        description = item.get("description") or ""
+        attendees = [a for a in attendees if a] or _description_attendees(description)
         return Event(
             id=item["id"],
             title=item.get("summary") or "(no title)",
             start=s,
             end=e,
-            description=item.get("description") or "",
-            attendees=[a for a in attendees if a],
+            description=description,
+            attendees=attendees,
         )
 
     def list_events(self, start: datetime, end: datetime) -> list[Event]:
@@ -280,6 +299,27 @@ class LiveTools(Tools):
             {"title": get(r, "title") or get(r, "url"), "url": get(r, "url"), "excerpts": list(get(r, "excerpts") or [])}
             for r in (get(res, "results") or [])[:max_results]
         ]
+
+    def extract_page(self, url: str, objective: str = "") -> dict:
+        """The full text of one public https page through Parallel Extract, as {"title", "url", "excerpts": [text]}.
+        Parallel fetches the page, nothing here connects to it. Tables come back as markdown. Untrusted web text."""
+        parts = urlparse(url)
+        if parts.scheme != "https" or not parts.hostname or parts.username or parts.password:
+            raise LiveToolError("extract_page only reads public https pages")
+        try:
+            res = self.search_client.extract(
+                urls=[url], objective=objective or None, advanced_settings={"full_content": {"max_chars_per_result": _PAGE_CHARS}}
+            )
+        except LiveToolError:
+            raise
+        except Exception as exc:
+            raise LiveToolError(f"Parallel extract failed: {exc}") from exc
+        results = get(res, "results") or []
+        if not results:
+            raise LiveToolError(f"Parallel could not read {parts.hostname}")
+        r = results[0]
+        text = get(r, "full_content") or "\n".join(get(r, "excerpts") or [])
+        return {"title": get(r, "title") or url, "url": get(r, "url") or url, "excerpts": [str(text)]}
 
     # ------------------------------------------------------------------ health and slack
     def read_health(self, days: int = 14) -> list[SleepDay]:

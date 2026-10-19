@@ -25,6 +25,7 @@ _WORKING = {
     "fetch_emails": "Reading your email",
     "fetch_thread": "Reading an email thread",
     "search_web": "Searching the web",
+    "extract_page": "Reading a web page",
     "read_health": "Reading your sleep data",
     "create_draft": "Saving a draft",
     "post_slack": "Posting to Slack",
@@ -73,6 +74,8 @@ def _title(name: str, args: dict, result: Any) -> str:
         return f"Read an email thread: {n} message(s)"
     if name == "search_web":
         return f"Searched the web: {str(args.get('objective', ''))[:80]}"
+    if name == "extract_page":
+        return f"Read a page: {str(args.get('url', ''))[:80]}"
     if name == "read_health":
         return f"Read your sleep data: {n} day(s)"
     if name == "create_draft":

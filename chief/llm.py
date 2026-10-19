@@ -8,12 +8,30 @@ demo mode never depend on a network call.
 from __future__ import annotations
 
 import logging
+from types import SimpleNamespace
 
 from chief.config import Config
 
 log = logging.getLogger("chief.llm")
 
 REQUEST_TIMEOUT = 20  # seconds: a slow model must not stall the stage; the fallback text answers instead
+
+
+def _message(r):
+    """The assistant message of a completion. Cline's API wraps a successful reply as {"data": {"choices": [...]}},
+    which the OpenAI SDK parses as choices=None with the payload in model_extra, so unwrap that shape too."""
+    if getattr(r, "choices", None):
+        return r.choices[0].message
+    data = (getattr(r, "model_extra", None) or {}).get("data") or {}
+    choices = data.get("choices") or []
+    if not choices:
+        raise ValueError("model reply has no choices")
+    m = choices[0].get("message") or {}
+    calls = [
+        SimpleNamespace(id=c.get("id"), function=SimpleNamespace(**(c.get("function") or {"name": "", "arguments": ""})))
+        for c in (m.get("tool_calls") or [])
+    ]
+    return SimpleNamespace(content=m.get("content"), tool_calls=calls)
 
 
 class LLM:
@@ -40,7 +58,7 @@ class LLM:
                 timeout=REQUEST_TIMEOUT,
                 messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
             )
-            return (r.choices[0].message.content or "").strip() or fallback
+            return (_message(r).content or "").strip() or fallback
         except Exception as exc:  # network, quota, model errors: never break the loop
             log.warning("LLM call failed, using fallback: %s", exc)
             return fallback
@@ -61,7 +79,7 @@ class LLM:
             r = self._client.chat.completions.create(
                 model=self.cfg.llm_model, temperature=0.2, stream=False, timeout=REQUEST_TIMEOUT, messages=messages, **kwargs
             )
-            msg = r.choices[0].message
+            msg = _message(r)
             out: dict = {"role": "assistant", "content": msg.content}
             calls = [
                 {"id": c.id, "type": "function", "function": {"name": c.function.name, "arguments": c.function.arguments}}

@@ -295,7 +295,7 @@ def test_list_folder_shape(world):
     assert [(e["name"], e["kind"]) for e in out["entries"]] == [("Acme", "folder"), ("notes.txt", "file")]
     assert out["folders"] == 1 and out["files"] == 1 and out["count"] == 2 and not out["truncated"]
     assert {k for e in out["entries"] for k in e} == {"name", "kind", "size", "modified"}  # names only, never contents
-    assert "hi" not in repr(out)
+    assert "hi" not in repr(out["entries"])  # entries only: the temp path may contain "hi" (e.g. a username)
 
 
 def test_list_folder_is_capped(world):

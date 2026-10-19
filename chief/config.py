@@ -48,7 +48,7 @@ class Config:
     show_debug_port: int | None = None  # optional: reload Calendar in place via DevTools
     show_dry_run: bool = False  # print the URLs instead of opening a browser
     local_roots: tuple[str, ...] = ()  # folders Chief may list/open (CHIEF_LOCAL_ROOTS); empty = the defaults, see chief/tools/local.py
-    live_timeout: float = 6.0  # demo mode: seconds a live read may take before the cached answer is used
+    live_timeout: float = 10.0  # demo mode: seconds a live read may take before the cached answer is used (a cold Composio read takes ~4.5 s, warm ones 1-2 s)
     cache_file: Path | None = None  # default: data_dir/demo_cache.json
 
     @property
@@ -71,7 +71,7 @@ class Config:
             show_debug_port=int(port) if port.isdigit() else None,
             show_dry_run=_flag("CHIEF_SHOW_DRY_RUN"),
             local_roots=tuple(r.strip().strip('"') for r in re.split(r"[;\r\n]+", os.getenv("CHIEF_LOCAL_ROOTS", "")) if r.strip().strip('"')),
-            live_timeout=_seconds(os.getenv("CHIEF_LIVE_TIMEOUT"), 6.0),
+            live_timeout=_seconds(os.getenv("CHIEF_LIVE_TIMEOUT"), 10.0),
             cache_file=Path(os.environ["CHIEF_DEMO_CACHE"]) if os.getenv("CHIEF_DEMO_CACHE") else None,
             now=datetime.fromisoformat(pinned) if pinned else None,
             llm_base_url=os.getenv("CHIEF_LLM_BASE_URL") or None,

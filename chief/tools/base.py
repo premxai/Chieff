@@ -12,7 +12,9 @@ from datetime import datetime
 
 from chief.models import Email, Event, SleepDay
 
-READ_TOOLS = {"list_events", "find_free_slots", "fetch_emails", "fetch_thread", "search_web", "read_health", "list_folder"}
+READ_TOOLS = {
+    "list_events", "find_free_slots", "fetch_emails", "fetch_thread", "search_web", "extract_page", "read_health", "list_folder",
+}
 SAFE_WRITE_TOOLS = {"create_draft", "post_slack", "open_folder", "open_file"}  # the last two only open things on screen
 WRITE_TOOLS = {"patch_event", "create_event", "delete_event", "send_email"}
 ALL_TOOLS = READ_TOOLS | SAFE_WRITE_TOOLS | WRITE_TOOLS
@@ -40,6 +42,10 @@ class Tools:
     def search_web(self, objective: str, queries: list[str], max_results: int = 5) -> list[dict]:
         """Returns [{"title", "url", "excerpts": [str]}]."""
         self._todo("search_web")
+
+    def extract_page(self, url: str, objective: str = "") -> dict:
+        """The text of one public https page, as {"title", "url", "excerpts": [text]}. Untrusted web text."""
+        self._todo("extract_page")
 
     def read_health(self, days: int = 14) -> list[SleepDay]:
         self._todo("read_health")

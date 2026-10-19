@@ -17,19 +17,32 @@ The owner's priorities: a demo that works live, honesty about what is real vs mo
 
 ## 2. Honest status (what is verified and what is not)
 
-**Verified (on Windows, Python 3.13, mock mode):**
-- 636 tests pass, 2 skipped (`.venv\Scripts\python.exe -m pytest -q`). All use fakes; no network.
+**Verified against real services (2026-10-19, a dedicated demo Google account (address kept out of this public repo; it is `CHIEF_DEMO_GMAIL` in `.env`), Windows, Python 3.13):**
+- **Composio Gmail and Calendar:** connected as the demo account; 10 seeded emails and 67 events read and parsed. One approved audit ran
+  3 `patch_event` and 1 `create_event`; the calendar was read back, the times were right, and the day was then reverted by hand
+  (restoring patches plus one `delete_event`). The first live run needed two parser fixes in `LiveTools._event` (the calendar owner is
+  listed as an attendee of every event, and seeded guests exist only in the description).
+- **Parallel:** `search_web` and the new `extract_page` (Parallel Extract, whole page) work. `trip_planner` read a real train from
+  caltrain.com's weekday timetable through `chief/caltrain.py` (a validated markdown-table parser).
+- **Model:** the Cline API works with `anthropic/claude-sonnet-4.6` (the one in `.env`) and `moonshotai/kimi-k2.5`, text and tool calls.
+  `deepseek/deepseek-chat` fails upstream and `minimax/minimax-m2.5` returned empty replies: **model IDs in older docs are stale**, use
+  `https://api.cline.bot/api/v1/models`. Cline wraps replies as `{"data": ...}`; `chief/llm.py` unwraps it (before that fix Chief silently
+  used canned text with every model).
+- **Skills run live:** `audit`, `meeting_prep` (Dana, from real threads), `trip_planner`. `email_brief` sees all 10 emails through the
+  Composio read but was not run as a skill, and `draft_reply` has not been run.
+- `python -m chief doctor`: 0 failing; warnings for the missing `cloudflared` and the missing demo cache.
+- 666 tests pass, 1 skipped (`.venv\Scripts\python.exe -m pytest -q`). All use fakes; no network.
 - The full story runs through the intent layer on seeded mock data and was driven through the real web routes with the Stage page
   open in a browser: inbox, calendar changes with NEW/UPDATED badges, research panel, parallel task lanes, approval cards.
 - A manual safety scan found no `shell=True`, `eval`/`exec`, `innerHTML`, or secret printing; subprocess calls take argument lists only.
 
-**NOT verified. Never run against anything real (no keys existed):**
-- Composio Calendar and Gmail (`chief/tools/live.py`, `chief/tools/composio_client.py`). The shape of Composio's returned data is
-  an assumption (see the docstring at the top of `live.py`); a mismatch shows up as empty lists. This is the biggest risk.
-- Parallel web search, Slack Socket Mode (`slack-bolt` is not even installed in the venv), Whisper speech-to-text (Groq),
-  the Cline API as the model host, the Cloudflare tunnel, a real phone (Samsung/Chrome), the real-window layer with a real Google
-  login, and `seed_demo_account.py --apply` (dry run only).
-- Tool calling on any open model. The scripted demo does not need a model; only the open-ended `general` skill and optional phrasing do.
+**NOT verified yet:**
+- `create_draft`, `send_email` and `GMAIL_REPLY_TO_THREAD` (so `draft_reply` end to end), `patch_event` with changed start/end times.
+- Slack Socket Mode (`slack-bolt` is not installed in the venv), Whisper speech-to-text (Groq key is in `.env`, never called), the
+  Cloudflare tunnel (`cloudflared` not installed), a real phone, and the real-window layer with a real Google login.
+- **The demo cache** (`data/demo_cache.json` does not exist) and `demo`-mode failover against live services.
+- Tool calling on an *open* model (Claude and Kimi worked). The scripted demo does not need a model; only the `general` skill and phrasing do.
+- The `general` skill on the live model, and the Stage with live data.
 - Git: the first commit (`59730c1`, 2026-10-19) is the first time any of this was under version control; everything before it was built in a
   plain folder.
 
@@ -66,7 +79,7 @@ Diagram: `docs/chief-architecture.excalidraw` (regenerate with `scripts/make_dia
 | Core | `chief/runtime.py` (wiring), `gate.py` (approval gate), `memory.py`, `activity.py` (event bus), `heartbeat.py`, `config.py` |
 | Routing | `chief/intent.py` (approve/skip words, follow-ups, parallel split, skill triggers), `conversation.py` |
 | Skills (one file each) | `audit`, `email_brief`, `draft_reply`, `meeting_prep`, `open_brief`, `trip_planner`, `files`, `general` in `chief/skills/` (contract: `skills/base.py`; guide: `docs/writing-skills.md`) |
-| Tools | `tools/base.py` (contract and tool classes), `mock.py`, `live.py` + `composio_client.py`, `recording.py`, `replay.py` (cache and failover), `local.py` (folders/files) |
+| Tools | `tools/base.py` (contract and tool classes), `mock.py`, `live.py` + `composio_client.py`, `recording.py`, `replay.py` (cache and failover), `local.py` (folders/files); `chief/caltrain.py` reads the Caltrain timetable page that `extract_page` returns |
 | Surfaces | `web/app.py` + `index.html` (phone) + `stage.html` (projector), `slack_app.py`, `screen.py` (real browser windows) |
 | Demo ops | `launcher.py`, `doctor.py`, `scripts/seed_demo_account.py`, `scripts/tunnel.ps1`, `data/`, `demo/` |
 | Docs | `docs/*.md`: `demo-script.md`, `demo-day.md`, `events.md`, `live-tools.md`, `phone-setup.md`, `screen-setup.md`, `slack-setup.md`, `demo-account.md`, `local-actions.md`, `general-assistant.md`, `submission.md`, `video-shotlist.md` |
@@ -92,32 +105,44 @@ Diagram: `docs/chief-architecture.excalidraw` (regenerate with `scripts/make_dia
 9. **The model client (`chief/llm.py`) sends `stream=False` and a 20 s timeout.** Cline's API streams by default; without this every
    call silently falls back to canned text.
 
-## 6. What the owner still has to do (an agent cannot)
+## 6. What the owner has to do (an agent cannot)
 
-Creating accounts and entering credentials is the owner's job. `docs/demo-account.md` and the step list below cover it:
+Creating accounts and entering credentials is the owner's job. **Items 1 to 3 are done** (as of 2026-10-19: a dedicated demo
+account, Composio key with write access to `session_management` and both connections, Parallel, Groq and Cline keys in
+`.env`); **item 4 is not**. `docs/demo-account.md` and the step list below cover it:
 1. A **dedicated demo Google account** (address containing `demo`), 2-Step Verification, an app password, IMAP enabled. Values go in `.env`
    (`CHIEF_DEMO_GMAIL`, `CHIEF_DEMO_APP_PASSWORD`). Never use a personal account on stage.
 2. **Composio** account and key (`COMPOSIO_API_KEY`, `CHIEF_USER_ID`), then connect Gmail and Calendar *as the demo account*:
    `python -m chief.tools.composio_client gmail|calendar|--status`.
 3. **Parallel** key (`PARALLEL_API_KEY`), **Groq** key for Whisper (`CHIEF_STT_API_KEY`), and a model key. The owner plans to use the
-   **Cline API**: `CHIEF_LLM_BASE_URL=https://api.cline.bot/api/v1`, a `provider/model` ID such as `deepseek/deepseek-chat`, key from app.cline.bot.
+   **Cline API**: `CHIEF_LLM_BASE_URL=https://api.cline.bot/api/v1`, a `provider/model` ID that the live list accepts (currently
+   `anthropic/claude-sonnet-4.6`; `deepseek/deepseek-chat` no longer works), key from app.cline.bot.
 4. `winget install --id Cloudflare.cloudflared` (the phone mic needs HTTPS), then `python -m chief show-login` to sign the demo account
    into Chief's separate browser profile.
 
 ## 7. Recommended next steps, in order
 
-1. `pip install -e ".[live]"`, then `python -m chief doctor`. Fix what it reports.
-2. **First real run** of Calendar and Gmail through Composio (a small script that calls `LiveTools.list_events` and `fetch_emails`).
-   Compare the real response shapes to the assumptions in `live.py` and fix the parsers. Check how Composio wants time strings in create/patch.
-3. Run `scripts/seed_demo_account.py` as a dry run, then `--apply --i-am-using-a-demo-account` once the owner approves.
-4. Run `python -m chief record-demo` to fill `data/demo_cache.json` (the stage safety net; git-ignored because it holds test-account snippets).
-5. Test a **real phone over the tunnel** (mic permission, Whisper route, spoken replies). Chrome on Android lists browser speech recognition as
-   "partial"; the server-side Whisper path is the primary one.
-6. Benchmark tool calling on the Cline models (`deepseek/deepseek-chat`, `minimax/minimax-m2.5`) before trusting the `general` skill live.
-7. Rehearse `docs/demo-script.md` end to end, then record the backup video (`docs/video-shotlist.md`).
-8. Keep `README.md` "Status and verification" honest as things get verified.
+Done on 2026-10-19: install and `doctor`, the first real Composio run (parsers fixed), seeding the demo account, an approved calendar write,
+live `audit`, `meeting_prep` and `trip_planner`, and a working model. What is left:
 
-Known small issues: the Stage calendar header labels can overlap at narrow widths; the `/ask` JSON response does not include the per-task
+1. Run `python -m chief record-demo` to fill `data/demo_cache.json` (the stage safety net; git-ignored because it holds test-account snippets),
+   then test `CHIEF_MODE=demo` failover with Wi-Fi off. Live reads take 0.7 to 4.5 s (the first, cold one is slowest); `CHIEF_LIVE_TIMEOUT` defaults to 10 s.
+2. **Reset the calendar between rehearsals.** An approved audit changes real events (`[Async]`, `Walk:`, a focus block). Nothing in Chief
+   undoes it. Restore the original titles and the descriptions `chief-demo-seed key=<key>. Fictional demo data, safe to delete.` (plus
+   ` Attendees: ...` where the seed had them) and delete the focus block, or add an undo command.
+3. Test a **real phone over the tunnel** (`winget install --id Cloudflare.cloudflared`; mic permission, Whisper route, spoken replies). Chrome on
+   Android lists browser speech recognition as "partial"; the server-side Whisper path is the primary one.
+4. Run `draft_reply` live (`create_draft` and `send_email` are untested) and `email_brief` as a skill.
+5. Rehearse `docs/demo-script.md` end to end in live mode, then record the backup video (`docs/video-shotlist.md`).
+6. Optional: benchmark tool calling on a cheaper or open model before trusting the `general` skill live; a real Cline agent/CLI touchpoint
+   (today only the Cline *API* is used, as the model host).
+7. Keep `README.md` "Status and verification" honest as things get verified.
+
+Set `CHIEF_NOW=2026-10-21T08:00:00` to play the story on the seeded week (the meeting-prep and trip steps look at the next 36 hours, so on
+Monday they would pick other meetings).
+
+Known small issues: the model sometimes restates facts loosely (a `meeting_prep` Background bullet said a questionnaire was "submitted" when
+Dana had sent it); the Stage calendar header labels can overlap at narrow widths; the `/ask` JSON response does not include the per-task
 list (the Stage gets task lanes from activity events instead); Slack is untested and optional; the DevTools window-reload path in `screen.py` is
 unverified with a real browser.
 
@@ -138,4 +163,4 @@ unverified with a real browser.
 ## 9. If you only have 20 minutes
 
 Run the tests, run `python -m chief web`, open `/stage`, type "how's my week looking?", then "do it", then "what's in my inbox?". Read
-`docs/demo-script.md`. Then do step 1 and 2 of section 7, because the first real Composio call is where the remaining risk is.
+`docs/demo-script.md`. Then do steps 1 to 3 of section 7: the demo cache and the real phone are where the remaining risk is.

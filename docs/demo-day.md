@@ -8,7 +8,7 @@ The script itself is in [demo-script.md](demo-script.md). This page is about kee
 |---|---|---|---|
 | `mock` | seeded sample data | seeded sample data | rehearsing the script, tests |
 | `live` | real Gmail, Calendar, Parallel | real, after approval | first checks with real keys |
-| `demo` | **live first**; if a read fails or takes longer than `CHIEF_LIVE_TIMEOUT` (6 s) it is answered from the cache | **live only**. If live is down the write fails with a clear error. Never replayed, never faked | the real thing on stage |
+| `demo` | **live first**; if a read fails or takes longer than `CHIEF_LIVE_TIMEOUT` (10 s) it is answered from the cache | **live only**. If live is down the write fails with a clear error. Never replayed, never faked | the real thing on stage |
 | `demo-offline` | the cache only, no network at all | **simulated** by the mock and tagged `simulated`; nothing real is touched | rehearsing with the Wi-Fi off, or the last-resort fallback |
 
 `python -m chief demo` runs `demo` by default; `--mode` picks another.

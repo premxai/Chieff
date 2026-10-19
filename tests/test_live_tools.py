@@ -99,6 +99,21 @@ def test_list_events_returns_naive_local_sorted_events():
     assert "pageToken" not in args  # None values are not sent
 
 
+def test_calendar_owner_is_not_a_guest_and_description_attendees_are_a_fallback():
+    desc = "chief-demo-seed key=k1. Fictional demo data, safe to delete. Attendees: dana@acme.example, sam@example.com."
+    me = {"email": "me@gmail.example", "self": True}
+    items = [
+        gcal("solo", "Standup", "2026-10-22T09:00:00-07:00", "2026-10-22T09:30:00-07:00", attendees=[me]),
+        gcal("seeded", "Pricing", "2026-10-22T10:00:00-07:00", "2026-10-22T11:00:00-07:00", attendees=[me], description=desc),
+        gcal("real", "Sync", "2026-10-22T12:00:00-07:00", "2026-10-22T13:00:00-07:00", attendees=[me, {"email": "x@y.io"}], description=desc),
+    ]
+    live, _ = make({"GOOGLECALENDAR_EVENTS_LIST": {"items": items}})
+    by_id = {e.id: e for e in live.list_events(datetime(2026, 10, 22), datetime(2026, 10, 23))}
+    assert by_id["solo"].attendees == []  # the owner alone is nobody
+    assert by_id["seeded"].attendees == ["dana@acme.example", "sam@example.com"]  # description fallback, trailing dot dropped
+    assert by_id["real"].attendees == ["x@y.io"]  # real attendees win over the description
+
+
 def test_list_events_follows_pages():
     pages = iter([
         {"items": [gcal("a", "A", "2026-10-22T09:00:00-07:00", "2026-10-22T10:00:00-07:00")], "nextPageToken": "p2"},
@@ -286,6 +301,51 @@ def test_search_web_pins_domains_from_argument_or_env(monkeypatch):
     monkeypatch.setenv("CHIEF_SEARCH_DOMAINS", "caltrain.com, 511.org")
     live.search_web("t", ["q"])
     assert p.calls[-1]["advanced_settings"]["source_policy"]["include_domains"] == ["caltrain.com", "511.org"]
+
+
+def test_extract_page_returns_the_whole_page_through_parallel_extract():
+    calls = []
+
+    class Extract:
+        def extract(self, **kw):
+            calls.append(kw)
+            return NS(results=[NS(title="Weekday timetable", url="https://www.caltrain.com/t", excerpts=["part"], full_content="WHOLE PAGE")])
+
+    live, _ = make(search_client=Extract())
+    out = live.extract_page("https://www.caltrain.com/t", "SF to Palo Alto")
+    assert out == {"title": "Weekday timetable", "url": "https://www.caltrain.com/t", "excerpts": ["WHOLE PAGE"]}
+    assert calls[0]["urls"] == ["https://www.caltrain.com/t"] and calls[0]["objective"] == "SF to Palo Alto"
+    assert calls[0]["advanced_settings"] == {"full_content": {"max_chars_per_result": 120_000}}
+
+
+@pytest.mark.parametrize(
+    "url", ["http://www.caltrain.com/t", "file:///etc/passwd", "ftp://x.example/a", "https://user:pw@x.example/a", "https:///nohost", "javascript:alert(1)"],
+)
+def test_extract_page_only_reads_public_https_pages(url):
+    class Never:
+        def extract(self, **_):
+            raise AssertionError("must not be called")
+
+    live, _ = make(search_client=Never())
+    with pytest.raises(LiveToolError, match="https"):
+        live.extract_page(url)
+
+
+def test_extract_page_errors_are_live_tool_errors():
+    class Boom:
+        def extract(self, **_):
+            raise RuntimeError("503")
+
+    class Empty:
+        def extract(self, **_):
+            return NS(results=[])
+
+    live, _ = make(search_client=Boom())
+    with pytest.raises(LiveToolError, match="503"):
+        live.extract_page("https://www.caltrain.com/t")
+    live, _ = make(search_client=Empty())
+    with pytest.raises(LiveToolError, match="could not read"):
+        live.extract_page("https://www.caltrain.com/t")
 
 
 def test_search_web_errors_and_missing_key(monkeypatch):

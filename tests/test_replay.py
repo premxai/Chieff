@@ -72,7 +72,9 @@ def recorded(tmp_path, cache):
 def test_recording_fills_the_cache_without_any_write(recorded):
     cache, mock, summary = recorded
     assert summary["errors"] == [] and summary["entries"] == len(cache) > 8
-    assert set(cache.counts()) == {"list_events", "fetch_emails", "fetch_thread", "search_web", "find_free_slots", "read_health"}
+    assert set(cache.counts()) == {
+        "list_events", "fetch_emails", "fetch_thread", "search_web", "extract_page", "find_free_slots", "read_health",
+    }
     assert mock.calls == []  # not even a draft: recording never writes
     assert summary["skipped"] == 2  # "Do it" and "Add it" are never run
 
@@ -155,6 +157,23 @@ def test_replay_tolerates_the_demo_running_at_a_different_time(recorded):
         5,
     )
     assert hits and "Caltrain" in hits[0]["title"]
+
+
+def test_a_whole_page_survives_the_cache_and_is_keyed_by_url(cache):
+    page = "|Zone |Station Name |152 |\n" + "| x |" * 5000 + "\nend-of-page"  # ~35 KB: far past the 1 KB search clip
+
+    class T(MockTools):
+        def extract_page(self, url, objective=""):
+            return {"title": "Timetable", "url": url, "excerpts": [page]}
+
+    url = "https://www.caltrain.com/schedules/weekday-timetable"
+    RecorderTools(T(NOW), cache).extract_page(url, "SF to Palo Alto")
+    replay = ReplayTools(cache)
+    got = replay.extract_page(url.upper(), "a different objective")  # same page, whatever the wording
+    assert got["excerpts"][0].endswith("end-of-page") and len(got["excerpts"][0]) == len(page)
+    assert replay.pop_meta()["cached"] is True
+    with pytest.raises(CacheMiss):
+        replay.extract_page("https://www.caltrain.com/schedules/weekend-timetable")
 
 
 def test_replay_miss_says_how_to_fix_it(cache):

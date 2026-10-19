@@ -79,6 +79,9 @@ class MockTools(Tools):
         # Placeholder only. Real train times and places come from Parallel (task T5), never from here.
         return [{"title": "MOCK result", "url": "https://example.com/mock", "excerpts": [f"MOCK result for: {objective}"]}]
 
+    def extract_page(self, url: str, objective: str = "") -> dict:
+        return {"title": "MOCK page", "url": "https://example.com/mock", "excerpts": [f"MOCK page text for: {objective}"]}
+
     # --- safe writes
     def create_draft(self, to, subject, body, thread_id=None) -> dict:
         d = {"to": to, "subject": subject, "body": body, "thread_id": thread_id}

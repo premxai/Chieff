@@ -141,6 +141,83 @@ def test_model_rephrase_that_keeps_the_facts_is_used(cfg, tools, cards):
     assert rt.run_skill("trip_planner", request=ASK).summary == reply
 
 
+# --- the official timetable table (extract_page + chief/caltrain.py)
+TIMETABLE_URL = "https://www.caltrain.com/schedules/weekday-timetable"
+
+
+def timetable(*trains):
+    """A caltrain.com-shaped southbound table. trains = (number, San Francisco time, Palo Alto time)."""
+    head = "|Zone |Station Name |" + " |".join(n for n, _, _ in trains) + " |"
+    sep = "| --- | --- |" + " --- |" * len(trains)
+    sf = "|1 |[San Francisco](https://www.caltrain.com/station/sanfrancisco) |" + " |".join(a for _, a, _ in trains) + " |"
+    pa = "|4 |[Palo Alto](https://www.caltrain.com/station/paloalto) |" + " |".join(b for _, _, b in trains) + " |"
+    return "## Southbound\n\n" + "\n".join([head, sep, sf, pa]) + "\n"
+
+
+def stub_timetable(tools, text, url=TIMETABLE_URL):
+    seen = []
+
+    def extract_page(page_url, objective=""):
+        seen.append(page_url)
+        return {"title": "Weekday timetable", "url": url, "excerpts": [text]}
+
+    tools.extract_page = extract_page
+    return seen
+
+
+def test_timetable_trip_is_read_from_the_official_table(rt, tools):
+    seen = stub_timetable(tools, timetable(("150", "5:25pm", "6:14pm"), ("152", "6:55pm", "7:44pm"), ("154", "7:25pm", "8:14pm")))
+    p = rt.run_skill("trip_planner", request=ASK)
+    ev = p.actions[0].args
+    assert seen == [TIMETABLE_URL]  # the weekday page, on a Wednesday
+    assert ev["start"] == "2026-10-21T18:55:00" and ev["end"] == "2026-10-21T19:44:00"  # 5:25 PM is before 6
+    assert "train 152 from San Francisco" in p.summary and TIMETABLE_URL in p.summary
+    assert "Train 152" in ev["description"] and TIMETABLE_URL in p.sources
+    assert "holiday" in p.summary  # a regular timetable says nothing about holiday service: say so
+
+
+def test_timetable_trip_respects_the_calendar(rt, tools):
+    stub_timetable(tools, timetable(("152", "6:55pm", "7:44pm"), ("154", "7:25pm", "8:14pm"), ("156", "8:25pm", "9:14pm")))
+    busy = datetime(2026, 10, 21, 19, 0)
+    tools.events["ev-busy"] = Event("ev-busy", "Dinner", busy, busy + timedelta(minutes=60))
+    p = rt.run_skill("trip_planner", request=ASK)
+    assert p.actions[0].args["start"] == "2026-10-21T20:25:00"  # the 6:55 and 7:25 trains both run into dinner
+
+
+def test_a_broken_or_missing_page_falls_back_to_saying_so(rt, tools):
+    stub_timetable(tools, "|Zone |Station Name |152 |\n| --- | --- | --- |\n|1 |[San Francisco](x) |6:55pm |\n|4 |[Palo Alto](x) |\n")
+    stub_train(tools, [])
+    p = rt.run_skill("trip_planner", request=ASK)
+    assert p.actions == [] and "not guessing" in p.summary
+
+    def boom(url, objective=""):
+        raise RuntimeError("page down")
+
+    tools.extract_page = boom
+    assert rt.run_skill("trip_planner", request=ASK).actions == []  # a down page never breaks the skill
+
+
+def test_timetable_from_an_untrusted_host_is_ignored(rt, tools):
+    stub_timetable(tools, timetable(("152", "6:55pm", "7:44pm")), url="https://spam.example/timetable")
+    stub_train(tools, [])
+    assert rt.run_skill("trip_planner", request=ASK).actions == []
+
+
+def test_weekend_days_read_the_weekend_page_and_series(tools):
+    from types import SimpleNamespace
+
+    from chief.skills.trip_planner import _timetable_trains
+
+    seen = stub_timetable(
+        tools, timetable(("652", "6:55pm", "7:44pm"), ("152", "7:25pm", "8:14pm")),
+        url="https://www.caltrain.com/schedules/weekend-timetable",
+    )
+    sat = datetime(2026, 10, 24, 18, 0)
+    out = _timetable_trains(SimpleNamespace(tools=tools), sat.date(), "Palo Alto", sat)
+    assert seen == ["https://www.caltrain.com/schedules/weekend-timetable"]
+    assert [t.number for t in out] == ["652"]  # 152 is weekday service
+
+
 # --- silence
 @pytest.mark.parametrize("request_text", ["", "   ", "what's the weather like", "how's my inbox"])
 def test_silent_without_a_trip_request(rt, tools, request_text):
