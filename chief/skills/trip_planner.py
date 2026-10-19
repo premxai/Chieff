@@ -104,6 +104,15 @@ def _trains(results: list[dict], day: date, after: datetime) -> list[Train]:
     return [found[k] for k in sorted(found)]
 
 
+def _boba_name(result: dict | None) -> str:
+    """A short shop name for the event title from a search result title like 'Boba Guys in Palo Alto, CA - Apple Maps'.
+    Web text is untrusted: one line, plain characters, at most 40 of them."""
+    title = " ".join(str((result or {}).get("title") or "").split())
+    for sep in (" in ", " - ", " | ", " – ", " — ", ", "):
+        title = title.split(sep)[0]
+    return re.sub(r"[^\w &'.+-]", "", title).strip()[:40].strip()
+
+
 def _timetable_trains(ctx: Context, day: date, dest: str, after: datetime) -> list[Train]:
     """Trips read from caltrain.com's own timetable table (whole page through extract_page), validated by
     chief/caltrain.py. Empty on any failure: the caller falls back to search excerpts, then to saying so."""
@@ -176,6 +185,7 @@ def run(ctx: Context) -> Proposal | None:
     free = ctx.tools.find_free_slots(leave_after, midnight, 30)
     candidates = from_timetable or _trains(train_results, day, leave_after)
     options = [t for t in candidates if _fits(ctx, day_events, free, t)]
+    boba_name = _boba_name(boba)
     sources = list(dict.fromkeys(seen_urls + ([boba["url"]] if boba else [])))
     key = f"trip_planner:{day.isoformat()}:{dest.lower()}:{leave_after:%H%M}"
 
@@ -209,7 +219,7 @@ def run(ctx: Context) -> Proposal | None:
     event = ToolCall(
         "create_event",
         {
-            "title": f"Caltrain to {dest}",
+            "title": f"Caltrain to {dest}" + (f" + boba at {boba_name}" if boba_name else ""),
             "start": t.start.isoformat(),
             "end": end.isoformat(),
             "description": f"Source: {t.url}\nExcerpt: {t.excerpt}\n{boba_line}{note}",

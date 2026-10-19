@@ -28,19 +28,28 @@ The owner's priorities: a demo that works live, honesty about what is real vs mo
   `deepseek/deepseek-chat` fails upstream and `minimax/minimax-m2.5` returned empty replies: **model IDs in older docs are stale**, use
   `https://api.cline.bot/api/v1/models`. Cline wraps replies as `{"data": ...}`; `chief/llm.py` unwraps it (before that fix Chief silently
   used canned text with every model).
-- **Skills run live:** `audit`, `meeting_prep` (Dana, from real threads), `trip_planner`. `email_brief` sees all 10 emails through the
-  Composio read but was not run as a skill, and `draft_reply` has not been run.
-- `python -m chief doctor`: 0 failing; warnings for the missing `cloudflared` and the missing demo cache.
-- 666 tests pass, 1 skipped (`.venv\Scripts\python.exe -m pytest -q`). All use fakes; no network.
+- **Skills run live:** `audit`, `email_brief` (flags the injection email), `meeting_prep` (Dana, from real threads), `trip_planner`, and
+  `draft_reply` as far as the **draft** (a real Gmail draft is saved in the demo account; the send was never approved).
+- **Approvals by voice phrasing:** "That sounds good. Go ahead." and "Perfect. Add it." now approve (a short praise opener is stripped). Before
+  that fix they fell through to the open-ended model, which invented a confident reply; a muddled yes with something pending now asks again
+  instead of letting the model answer. Real approvals made 4 and then 1 calendar changes; `scripts/reset_demo_calendar.py` undid them.
+- **Demo cache recorded** (`data/demo_cache.json`, 15 reads, git-ignored) on the demo clock. `demo-offline` plays the whole story from it and
+  `demo` mode with a deliberately broken Composio key still answered reads from it.
+- **Phone path:** `cloudflared` installed, quick tunnel up, auth (401 without the token), page, `/stt` (Groq Whisper, exact transcript in 0.6 s),
+  `/ask` and `/stage` all work through the public https address. **Real-window layer:** `show-login` and `show-demo` worked and Gmail opened
+  on the right half of the screen from a live `/ask`.
+- `python -m chief doctor`: 0 failing.
+- 688 tests pass, 1 skipped (`.venv\Scripts\python.exe -m pytest -q`). All use fakes; no network.
 - The full story runs through the intent layer on seeded mock data and was driven through the real web routes with the Stage page
   open in a browser: inbox, calendar changes with NEW/UPDATED badges, research panel, parallel task lanes, approval cards.
 - A manual safety scan found no `shell=True`, `eval`/`exec`, `innerHTML`, or secret printing; subprocess calls take argument lists only.
 
 **NOT verified yet:**
-- `create_draft`, `send_email` and `GMAIL_REPLY_TO_THREAD` (so `draft_reply` end to end), `patch_event` with changed start/end times.
-- Slack Socket Mode (`slack-bolt` is not installed in the venv), Whisper speech-to-text (Groq key is in `.env`, never called), the
-  Cloudflare tunnel (`cloudflared` not installed), a real phone, and the real-window layer with a real Google login.
-- **The demo cache** (`data/demo_cache.json` does not exist) and `demo`-mode failover against live services.
+- `send_email` and `GMAIL_REPLY_TO_THREAD` (an approved send), `patch_event` with changed start/end times.
+- Slack Socket Mode (`slack-bolt` is not installed in the venv).
+- **A real phone**: the microphone permission, hold-to-talk recording format and spoken replies on Android Chrome were not confirmed.
+- Whether Google Calendar refreshes on screen after an approved write without `CHIEF_SHOW_DEBUG_PORT` (rehearse; set it to 9222 if stale).
+- `demo`-mode failover with the network genuinely cut (only simulated with a bad key); approved writes with live down fail with an error by design.
 - Tool calling on an *open* model (Claude and Kimi worked). The scripted demo does not need a model; only the `general` skill and phrasing do.
 - The `general` skill on the live model, and the Stage with live data.
 - Git: the first commit (`59730c1`, 2026-10-19) is the first time any of this was under version control; everything before it was built in a
@@ -57,6 +66,35 @@ python -m venv .venv
 ```
 Useful for repeatable runs: `CHIEF_NOW=2026-10-21T08:00:00`, `CHIEF_STATE_DIR=<temp dir>`, `CHIEF_WEB_TOKEN=demo123`.
 The Stage is at `/stage?token=...`; the phone page is `/?token=...`.
+
+### Demo day run (live, with the safety net)
+
+The seeded mail is dated Monday 2026-10-19 and the calendar week is anchored to it, so the story only reads right on a **pinned demo clock**
+(Tuesday 2026-10-20 08:00: Dana's mail and the invoice are still inside the 48-hour window, the audit finds Tuesday, Dana's call is within 36 h).
+Say on stage that it is a demo account with seeded data on a demo clock.
+
+```powershell
+# terminal 1: the server (demo = live first, recorded cache if a read fails; windows on the right half of the screen)
+$env:CHIEF_NOW = '2026-10-20T08:00:00'; $env:CHIEF_MODE = 'demo'; $env:CHIEF_SHOW_WINDOWS = '1'; .venv\Scripts\python.exe -m chief web --port 8765
+# terminal 2: the https tunnel for the phone (the address changes on every start)
+& 'C:\Program Files (x86)\cloudflared\cloudflared.exe' tunnel --url http://localhost:8765
+```
+Phone: `https://<tunnel>.trycloudflare.com/?token=<CHIEF_WEB_TOKEN>`. Stage: `http://localhost:8765/stage?token=...` (F11, left half).
+Window layout is `CHIEF_SHOW_WINDOW_POS=720,0` / `CHIEF_SHOW_WINDOW_SIZE=720x900` in `.env` for a 1440x900 screen (`python -m chief show-layout`).
+Rebuild the cache on the same clock after any change to the demo data: `$env:CHIEF_NOW = '2026-10-20T08:00:00'; .venv\Scripts\python.exe -m chief record-demo`.
+
+**Say these** (each contains a trigger or an approval word; a model never approves): "What's in my inbox?", "Reply to Sam and say Friday works",
+"How's my week looking?", "That sounds good, go ahead", "Prep me for my meeting with Dana", "I'm heading to Palo Alto after this, find me a Caltrain
+after 6 and a boba place on the way", "Perfect, add it".
+
+**Reset between rehearsals.** Approving the audit and the trip changes real events in the demo calendar (`[Async]`, `Walk:`, a focus block, a
+`Caltrain to Palo Alto + boba at ...` event). Put it back with (dry run first by leaving off the flags):
+```powershell
+.venv\Scripts\python.exe scripts\reset_demo_calendar.py --apply --i-am-using-a-demo-account
+```
+It only touches what the demo changed and refuses without the demo flag and a demo-looking `CHIEF_DEMO_GMAIL`. It cannot remove the Gmail drafts
+that "Reply to Sam" saves (Chief has no delete-draft tool): delete extras by hand. To re-seed from scratch use `scripts/seed_demo_account.py`
+(it skips what exists).
 
 CLI subcommands: `run`, `web`, `skills`, `reset`, `doctor`, `demo`, `record-demo`, `show-login`, `show-demo`, `show-layout`, `slack`.
 `python -m chief doctor` prints what is missing (env var names only, never values). `python -m chief demo` is the one-command stage launcher.
@@ -90,8 +128,9 @@ Diagram: `docs/chief-architecture.excalidraw` (regenerate with `scripts/make_dia
 1. **Writes only through `ApprovalGate`.** Skills get `ScopedTools` (read tools only). `WRITE_TOOLS` (`patch_event`, `create_event`,
    `delete_event`, `send_email`) run only after approval. `SAFE_WRITE_TOOLS` (`create_draft`, `post_slack`, `open_folder`, `open_file`) are
    UI-only or harmless. The gate also rejects a skill proposing a tool it did not declare in `propose_tools`.
-2. **Approve and skip are plain string matching** in `intent.py` (with filler words stripped, e.g. "Chief, do it please"). A model never
-   decides to approve anything.
+2. **Approve and skip are plain string matching** in `intent.py` (with filler words and a short praise opener stripped, e.g. "Chief, do it
+   please", "That sounds good, go ahead"). A model never decides to approve anything, and with a proposal waiting, a yes-like phrase that does
+   not match cleanly gets a "say do it or skip" reply, never an answer from the open-ended model.
 3. **Email and web text are untrusted.** `draft_reply` builds recipients and subjects from headers and the user's own words, never model
    output; bodies with links or addresses are discarded. The seeded inbox includes an injection email that must stay "flagged, not followed".
 4. **Read-only results are never queued** for approval (`gate.submit`), so "do it" cannot land on an empty card.
@@ -125,21 +164,18 @@ account, Composio key with write access to `session_management` and both connect
 Done on 2026-10-19: install and `doctor`, the first real Composio run (parsers fixed), seeding the demo account, an approved calendar write,
 live `audit`, `meeting_prep` and `trip_planner`, and a working model. What is left:
 
-1. Run `python -m chief record-demo` to fill `data/demo_cache.json` (the stage safety net; git-ignored because it holds test-account snippets),
-   then test `CHIEF_MODE=demo` failover with Wi-Fi off. Live reads take 0.7 to 4.5 s (the first, cold one is slowest); `CHIEF_LIVE_TIMEOUT` defaults to 10 s.
-2. **Reset the calendar between rehearsals.** An approved audit changes real events (`[Async]`, `Walk:`, a focus block). Nothing in Chief
-   undoes it. Restore the original titles and the descriptions `chief-demo-seed key=<key>. Fictional demo data, safe to delete.` (plus
-   ` Attendees: ...` where the seed had them) and delete the focus block, or add an undo command.
-3. Test a **real phone over the tunnel** (`winget install --id Cloudflare.cloudflared`; mic permission, Whisper route, spoken replies). Chrome on
-   Android lists browser speech recognition as "partial"; the server-side Whisper path is the primary one.
-4. Run `draft_reply` live (`create_draft` and `send_email` are untested) and `email_brief` as a skill.
-5. Rehearse `docs/demo-script.md` end to end in live mode, then record the backup video (`docs/video-shotlist.md`).
-6. Optional: benchmark tool calling on a cheaper or open model before trusting the `general` skill live; a real Cline agent/CLI touchpoint
-   (today only the Cline *API* is used, as the model host).
-7. Keep `README.md` "Status and verification" honest as things get verified.
+1. Test a **real phone over the tunnel**: mic permission, hold-to-talk, spoken replies. Chrome on Android lists browser speech recognition as
+   "partial"; the server-side Whisper path (verified) is the primary one.
+2. Rehearse the "Demo day run" above end to end by voice, with the Stage on the left and the real windows on the right, resetting between runs.
+   Check that Calendar refreshes after an approval; if not, set `CHIEF_SHOW_DEBUG_PORT=9222`.
+3. Record the backup video (`docs/video-shotlist.md`).
+4. Try an approved `send_email` from `draft_reply` on the demo account (the draft step works; the send never ran).
+5. Optional: benchmark tool calling on a cheaper or open model before trusting the `general` skill live; a real Cline agent/CLI touchpoint
+   (today only the Cline *API* is used, as the model host); an undo command for approved calendar changes.
+6. Keep `README.md` "Status and verification" honest as things get verified.
 
-Set `CHIEF_NOW=2026-10-21T08:00:00` to play the story on the seeded week (the meeting-prep and trip steps look at the next 36 hours, so on
-Monday they would pick other meetings).
+Do not run the story on the real clock on a Monday: the meeting-prep and trip steps look at the next 36 hours and the audit looks at the next
+heavy day, so they would pick other meetings. Use the pinned demo clock above.
 
 Known small issues: the model sometimes restates facts loosely (a `meeting_prep` Background bullet said a questionnaire was "submitted" when
 Dana had sent it); the Stage calendar header labels can overlap at narrow widths; the `/ask` JSON response does not include the per-task

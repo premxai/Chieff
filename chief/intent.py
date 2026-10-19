@@ -48,14 +48,38 @@ _LEAD_FILLER = {"chief", "hey", "hi", "ok", "okay", "alright", "actually", "plea
 _TRAIL_FILLER = {"chief", "please", "now", "thanks", "thank", "you", "then", "ok", "okay"}
 
 
+# A short opener of praise before the actual yes: "That sounds good. Go ahead." / "Perfect, add it." Stripped only from the
+# front, and only when words remain, so "sounds good" on its own is still the command it always was.
+_PRAISE = sorted(
+    (tuple(p.split()) for p in (
+        "that sounds good", "that looks good", "that sounds great", "that works", "sounds good", "looks good", "sounds great",
+        "perfect", "great", "good", "nice", "cool", "awesome", "excellent", "wonderful", "fine",
+    )),
+    key=len, reverse=True,
+)
+# Strong, unambiguous yes phrases: with a proposal waiting, hearing one of these that we could not match cleanly means "ask".
+_STRONG_YES = ("do it", "go ahead", "add it", "send it", "approve", "make it so", "go for it")
+
+
 def _command(said: str) -> str:
-    """`said` without leading/trailing filler words; the original when stripping would leave nothing."""
+    """`said` without leading/trailing filler and praise openers; the original when stripping would leave nothing."""
     words = said.split()
-    while len(words) > 1 and words[0] in _LEAD_FILLER:
-        words.pop(0)
+    while len(words) > 1:
+        if words[0] in _LEAD_FILLER:
+            words.pop(0)
+            continue
+        praise = next((p for p in _PRAISE if len(words) > len(p) and tuple(words[: len(p)]) == p), None)
+        if praise is None:
+            break
+        del words[: len(praise)]
     while len(words) > 1 and words[-1] in _TRAIL_FILLER:
         words.pop()
     return " ".join(words) or said
+
+
+def _sounds_like_a_yes(said: str) -> bool:
+    padded = f" {said} "
+    return any(f" {p} " in padded for p in _STRONG_YES)
 
 MAX_PARALLEL = 4  # tasks per utterance, and threads used for them
 NOTHING = "Nothing worth your attention there."
@@ -343,7 +367,14 @@ def _handle(rt: Runtime, text: str) -> dict:
             proposals=proposals,
         )
 
-    plan = _split_by_triggers(rt, text) or _split_by_llm(rt, text, said)
+    plan = _split_by_triggers(rt, text)
+    if plan is None and pending and _sounds_like_a_yes(said) and not _match_skill(rt, text):
+        # Never let the open-ended model improvise an answer to something that sounded like an approval: it may claim
+        # an action happened that did not. Only a clear yes approves (that is plain matching above), so ask again.
+        return _result(
+            'I heard something like a yes, but I only act on a clear one. Say "do it" to approve or "skip". ' + pending_note(rt)
+        )
+    plan = plan or _split_by_llm(rt, text, said)
     if plan is None:
         name = _route(rt, text, said)
         plan = [(name, text)] if name else None

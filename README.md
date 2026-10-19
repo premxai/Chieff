@@ -221,7 +221,7 @@ Facts as of the last check of this repository, with how each was established. "M
 | Cline | The **Cline API is used as the model host** (verified). **The Cline agent/CLI is not integrated.** |
 | Sleep data | **Generated sample**, not real health data. Samsung Health has no public cloud API; real export import is future work. |
 
-**Test run:** `python -m pytest -q` gave **666 passed, 1 skipped** on 2026-10-19 (Python 3.13.7, Windows 11), in the repo's `.venv` with the
+**Test run:** `python -m pytest -q` gave **688 passed, 1 skipped** on 2026-10-19 (Python 3.13.7, Windows 11), in the repo's `.venv` with the
 `live` extra installed. (An earlier run of **608 passed, 2 skipped** was also repeated in a fresh virtual environment built from a copy of the
 repository with `pip install -e ".[dev]"`.) The remaining skip is environmental: this Windows account cannot create symlinks. The number grows as tests are added, so re-run it
 rather than trusting this line. The `run --once`, `run --once --approve` and `skills` commands were run in both environments; `chief web` was
