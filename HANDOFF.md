@@ -87,14 +87,29 @@ Rebuild the cache on the same clock after any change to the demo data: `$env:CHI
 "How's my week looking?", "That sounds good, go ahead", "Prep me for my meeting with Dana", "I'm heading to Palo Alto after this, find me a Caltrain
 after 6 and a boba place on the way", "Perfect, add it".
 
-**Reset between rehearsals.** Approving the audit and the trip changes real events in the demo calendar (`[Async]`, `Walk:`, a focus block, a
-`Caltrain to Palo Alto + boba at ...` event). Put it back with (dry run first by leaving off the flags):
+**Reset between rehearsals.** A rehearsal leaves three kinds of state behind, and each one makes the next run go wrong:
+1. **Real calendar changes** (`[Async]`, `Walk:`, a focus block, a `Caltrain to Palo Alto + boba at ...` event).
+2. **Remembered decisions** in `.chief/memory.json`. Chief never re-proposes something it remembers approving or skipping, so without this the
+   second "how's my week looking?" answers "nothing worth your attention" even on a clean calendar.
+3. **Read flags** on the seeded emails. Chief only briefs unread mail, and a rehearsal marks Sam's and Maya's read, so the inbox brief quietly
+   drops them (3 to answer becomes 1).
+
+One command undoes all three (dry run first by leaving off the flags):
 ```powershell
 .venv\Scripts\python.exe scripts\reset_demo_calendar.py --apply --i-am-using-a-demo-account
 ```
-It only touches what the demo changed and refuses without the demo flag and a demo-looking `CHIEF_DEMO_GMAIL`. It cannot remove the Gmail drafts
-that "Reply to Sam" saves (Chief has no delete-draft tool): delete extras by hand. To re-seed from scratch use `scripts/seed_demo_account.py`
-(it skips what exists).
+It only touches what the demo changed (it finds the emails by the seed's `X-Chief-Demo-Seed` header; IMAP only clears the `\Seen` flag) and
+refuses without the demo flag and a demo-looking `CHIEF_DEMO_GMAIL`. The running server notices the cleared memory by itself. It cannot remove
+the Gmail drafts that "Reply to Sam" saves (Chief has no delete-draft tool): delete extras by hand. To re-seed from scratch use
+`scripts/seed_demo_account.py` (it skips what exists).
+
+**On the phone page:** a red **Stop** button appears while Chief is working or speaking. It stops the voice at once, stops waiting, and tells the
+server (`POST /stop`) to drop that request's answer and anything it proposed, without remembering a decision. It cannot interrupt a skill
+mid-read, and it never touches an approval. Spoken replies are a short clean version (`chief/speech.py`: no tables, symbols or link text,
+a long brief becomes its title plus "The details are on the screen"); the full text stays on screen.
+
+**Real windows for the trip:** the Caltrain timetable page opens when Chief reads it, then Google Maps transit directions between the two
+Caltrain stations and the boba shop open when the trip proposal appears (`chief/screen.py`). Cached or simulated results open nothing.
 
 CLI subcommands: `run`, `web`, `skills`, `reset`, `doctor`, `demo`, `record-demo`, `show-login`, `show-demo`, `show-layout`, `slack`.
 `python -m chief doctor` prints what is missing (env var names only, never values). `python -m chief demo` is the one-command stage launcher.

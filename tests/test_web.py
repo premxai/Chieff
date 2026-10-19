@@ -41,6 +41,7 @@ def test_every_route_needs_the_token(client):
         ("post", "/stt"),
         ("post", "/approve/abc"),
         ("post", "/skip/abc"),
+        ("post", "/stop"),
     ]:
         assert getattr(client, method)(path).status_code == 401, path
         assert getattr(client, method)(path, headers={"X-Chief-Token": "nope"}).status_code == 401, path
@@ -79,6 +80,55 @@ def test_ask_then_approve_through_the_gate(client, rt, tools):
     assert tools.calls  # the write happened, via the gate
     status = client.get("/status", headers=H).json()
     assert status["pending"] == [] and status["steps"][-1] == "Done"
+
+
+def test_replies_carry_a_clean_version_to_speak(client):
+    out = client.post("/ask", json={"text": "how's my week looking?"}, headers=H).json()
+    assert out["speak"] and "|" not in out["speak"] and "---" not in out["speak"]
+    pid = out["proposal"]["id"]
+    assert client.post(f"/skip/{pid}", headers=H).json()["speak"] == "Okay, skipped."
+
+
+def test_the_page_has_a_stop_button_that_cancels_speech_and_the_request(client):
+    html = client.get("/", params={"token": TOKEN}).text
+    assert 'id="stop"' in html and "speechSynthesis.cancel()" in html and "AbortController" in html and '"/stop"' in html
+    assert "out.speak || out.say" in html  # reads the clean version, shows the full text
+
+
+def test_stop_with_nothing_running_does_nothing(client):
+    assert client.post("/stop", headers=H).json() == {"stopped": False}
+
+
+def test_stop_during_a_request_drops_its_answer_and_proposals_and_remembers_nothing(rt, tools, stt, monkeypatch):
+    import threading
+
+    import chief.web.app as web
+
+    started, release = threading.Event(), threading.Event()
+    real = web.handle_utterance
+
+    def slow(rt_, text):
+        out = real(rt_, text)  # the audit proposal is made ...
+        started.set()
+        release.wait(5)  # ... and the request is still running when Stop is pressed
+        return out
+
+    monkeypatch.setattr(web, "handle_utterance", slow)
+    c = TestClient(create_app(rt, TOKEN, transcriber=stt))
+    result = {}
+    t = threading.Thread(target=lambda: result.update(c.post("/ask", json={"text": "how's my week looking?"}, headers=H).json()))
+    t.start()
+    assert started.wait(5)
+    stopped = c.post("/stop", headers=H).json()  # answers while the ask still holds the request lock
+    release.set()
+    t.join(5)
+    assert stopped == {"stopped": True}
+    assert result["stopped"] is True and result["say"] == "Stopped." and result["proposal"] is None
+    assert rt.gate.pending == {}  # the proposal it made is gone ...
+    assert not rt.memory.decisions("audit")  # ... and not remembered as a rejection
+    assert tools.calls == []  # nothing was written
+    again = c.post("/ask", json={"text": "how's my week looking?"}, headers=H).json()
+    assert again["proposal"] is not None  # asking again proposes it again
 
 
 def test_skip_runs_nothing(client, rt, tools):

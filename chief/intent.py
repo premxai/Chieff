@@ -185,12 +185,18 @@ def _split_by_llm(rt: Runtime, text: str, said: str) -> list[tuple[str, str]] | 
 # --- running tasks ---------------------------------------------------------------------------------
 
 
-def _nothing(task: Task) -> str:
+def _nothing(task: Task, rt: Runtime | None = None) -> str:
     if task.skill == "trip_planner":
         from chief.skills.trip_planner import parse_request
 
         if parse_request(task.request, None) is None:  # no "head to <place>": say what is missing
             return NO_DESTINATION
+    if rt is not None:
+        waiting = [p for p in rt.gate.pending.values() if p.skill == task.skill]
+        if waiting:  # asked again while the answer is still on the table: say so, do not claim there is nothing
+            return "That one is already waiting for your approval: " + waiting[-1].summary
+        if any(r["decision"] in ("accepted", "rejected") for r in rt.memory.decisions(task.skill)):
+            return f"I already acted on that ({task.skill}) earlier, so there is nothing new to propose."
     return NOTHING
 
 
@@ -205,7 +211,7 @@ def _run_task(rt: Runtime, task: Task, catch: bool) -> Proposal | None:
             rt.bus.emit("error", f"{task.skill} failed: {type(exc).__name__}", ok=False, detail={"skill": task.skill})
             task.say = f"I couldn't finish {task.skill}: {type(exc).__name__}."
             return None
-        task.say = proposal.summary if proposal else _nothing(task)
+        task.say = proposal.summary if proposal else _nothing(task, rt)
         task.proposal_id = proposal.id if proposal else None
         rt.bus.emit(
             "step", f"{task.skill}: finished",

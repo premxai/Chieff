@@ -22,6 +22,7 @@ from starlette.concurrency import run_in_threadpool
 from chief.intent import handle_utterance
 from chief.models import Proposal
 from chief.runtime import Runtime
+from chief.speech import spoken
 
 PAGE = Path(__file__).parent / "index.html"
 STAGE_PAGE = Path(__file__).parent / "stage.html"
@@ -86,6 +87,7 @@ class WebState:
 
     def __init__(self) -> None:
         self.lock = threading.Lock()  # one request touches the runtime at a time
+        self.stop = threading.Event()  # the Stop button: set while a request runs, checked when it finishes
         self.busy = False
         self.heard = ""
         self.say = ""
@@ -140,6 +142,7 @@ def create_app(rt: Runtime, token: str, transcriber: Transcriber | None = None) 
         if not text:
             raise HTTPException(400, "text is required")
         with state.lock:
+            state.stop.clear()
             state.busy, state.heard, state.steps = True, text, ["Thinking"]
             try:
                 out = handle_utterance(rt, text)
@@ -148,13 +151,31 @@ def create_app(rt: Runtime, token: str, transcriber: Transcriber | None = None) 
                 raise HTTPException(500, "handler failed") from exc
             finally:
                 state.busy = False
+            if state.stop.is_set():  # the user pressed Stop while this ran: nothing it proposed stays on the table
+                for p in out.get("proposals") or ([out["proposal"]] if out.get("proposal") else []):
+                    rt.gate.discard(p.id)
+                state.stop.clear()
+                reply("Stopped.", ["Stopped"])
+                return {"say": "Stopped.", "speak": "Stopped.", "steps": ["Stopped"], "proposal": None, "stopped": True}
             reply(out["say"], list(out["steps"]))
             proposal = out.get("proposal")
             return {
                 "say": out["say"],
+                "speak": spoken(out["say"]),
                 "steps": list(out["steps"]),
                 "proposal": proposal_json(proposal) if proposal else None,
             }
+
+    @app.post("/stop", dependencies=auth)
+    def stop() -> dict:
+        """The Stop button. A running skill cannot be killed mid-read, but its answer is dropped, nothing it proposed is
+        kept, and a stopped request never writes: writes only ever happen on an explicit approval, which Stop does not touch.
+        This route does not take the request lock, so it answers while a request is still running."""
+        running = state.busy
+        if running:
+            state.stop.set()
+            rt.bus.emit("step", "Stopped by you", detail={"state": "stopped"})
+        return {"stopped": running}
 
     def decide(proposal_id: str, approve: bool) -> dict:
         with state.lock:
@@ -171,7 +192,7 @@ def create_app(rt: Runtime, token: str, transcriber: Transcriber | None = None) 
                 rt.gate.skip(proposal_id)
                 results, say, steps = [], "Okay, skipped.", ["Skipped"]
             reply(say, steps)
-            return {"say": say, "steps": steps, "results": results}
+            return {"say": say, "speak": spoken(say), "steps": steps, "results": results}
 
     @app.post("/approve/{proposal_id}", dependencies=auth)
     def approve(proposal_id: str) -> dict:

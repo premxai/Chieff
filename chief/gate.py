@@ -102,6 +102,17 @@ class ApprovalGate:
         self.memory.log("approved", id=proposal.id, results=results)
         return results
 
+    def discard(self, proposal_id: str) -> bool:
+        """Drop a pending proposal the user stopped before it was shown (the Stop button). Nothing ran, and, unlike
+        skip(), no decision is remembered, so asking again later proposes it again."""
+        with self._lock:
+            proposal = self.pending.pop(proposal_id, None)
+        if proposal is None:
+            return False
+        self.bus.emit("skipped", f"Stopped: {proposal.summary}", detail={"id": proposal.id, "skill": proposal.skill, "stopped": True})
+        self.memory.log("discarded", id=proposal.id)
+        return True
+
     def skip(self, proposal_id: str) -> None:
         with self._lock:
             proposal = self.pending.pop(proposal_id)

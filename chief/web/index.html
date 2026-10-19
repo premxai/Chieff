@@ -62,6 +62,8 @@
   .opts label { display: flex; align-items: center; gap: 6px; min-height: 32px; }
   #err { color: var(--warn); font-size: 14px; margin: 0; }
   #err:empty { display: none; }
+  #stop { width: 100%; min-height: 52px; font-size: 18px; font-weight: 600; border: 2px solid var(--warn); color: var(--warn); background: transparent; border-radius: 12px; margin-top: 10px; }
+  #stop[hidden] { display: none; }
   .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); margin-right: 6px; }
   .dot.busy { background: var(--warn); }
   .dot.ok { background: var(--ok); }
@@ -76,6 +78,7 @@
 
   <section>
     <button id="talk" type="button">Hold to talk</button>
+    <button id="stop" type="button" hidden>Stop</button>
     <p class="hint" id="talkHint">Hold the button while you speak, or tap once to start and again to stop.</p>
   </section>
 
@@ -158,24 +161,28 @@
   $("testVoice").addEventListener("click", () => { primeSpeech(); speak("Hi, I'm Chief. Can you hear me?"); });
 
   // ---- ask --------------------------------------------------------------
+  let controller = null;  // aborts the /ask that is in flight when Stop is pressed
   async function ask(text) {
     text = (text || "").trim();
     if (!text) return;
     setError("");
     $("heard").textContent = "You: " + text;
     setBusy(true);
+    controller = new AbortController();
     try {
       const out = await api("/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text }),
+        signal: controller.signal,
       });
       $("say").textContent = out.say;
       $("say").classList.remove("empty");
-      speak(out.say);
+      speak(out.speak || out.say);  // the server sends a clean, short version to read aloud; the full text stays on screen
     } catch (e) {
-      setError(e.message);
+      if (e.name !== "AbortError") setError(e.message);  // Stop aborts on purpose: not an error
     } finally {
+      controller = null;
       setBusy(false);
       poll();
     }
@@ -185,7 +192,26 @@
     working = b;
     talk.disabled = b;
     if (!recorder) talk.textContent = b ? "Working…" : "Hold to talk";
+    refreshStop();
   }
+
+  // ---- stop ---------------------------------------------------------------
+  const stopBtn = $("stop");
+  function refreshStop() {
+    stopBtn.hidden = !(working || ("speechSynthesis" in window && speechSynthesis.speaking));
+  }
+  setInterval(refreshStop, 250);
+  stopBtn.addEventListener("click", async () => {
+    if ("speechSynthesis" in window) speechSynthesis.cancel();  // stop talking right now
+    const wasWorking = working;
+    if (controller) controller.abort();                         // stop waiting for the answer
+    refreshStop();
+    if (!wasWorking) return;
+    $("say").textContent = "Stopped.";
+    $("say").classList.remove("empty");
+    try { await api("/stop", { method: "POST" }); } catch (_) {}  // the server drops that answer and anything it proposed
+    poll();
+  });
 
   $("askForm").addEventListener("submit", (ev) => {
     ev.preventDefault();
@@ -342,7 +368,7 @@
       const out = await api("/" + verb + "/" + encodeURIComponent(id), { method: "POST" });
       $("say").textContent = out.say;
       $("say").classList.remove("empty");
-      speak(out.say);
+      speak(out.speak || out.say);
     } catch (e) {
       setError(e.message);
     }

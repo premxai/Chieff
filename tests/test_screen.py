@@ -117,6 +117,80 @@ def test_search_opens_the_top_result_urls_in_one_window():
     assert [t.new_window for t in launcher.opened] == [True, False, False]  # extra pages join the first window
 
 
+# ---- the trip: the real timetable page, then Google Maps
+
+
+TIMETABLE = "https://www.caltrain.com/schedules/weekday-timetable"
+
+
+def trip_proposal(title="Caltrain to Palo Alto + boba at Boba Guys", skill="trip_planner"):
+    return ev("proposal", None, {"skill": skill, "actions": [f"create_event(title={title!r}, start='2026-10-20T18:20:00', end='2026-10-20T18:59:00')"]})
+
+
+def test_reading_the_timetable_page_shows_that_page():
+    layer, launcher, _ = make()
+    layer(ev("read", "extract_page", {"args": {"url": TIMETABLE, "objective": "San Francisco to Palo Alto train times"}}))
+    assert urls(launcher) == [TIMETABLE]
+
+
+@pytest.mark.parametrize("bad", ["javascript:alert(1)", "file:///C:/x", "http://localhost:8765/", "http://192.168.1.5/", "", None])
+def test_extract_page_never_opens_a_non_public_or_non_http_url(bad):
+    layer, launcher, _ = make()
+    layer(ev("read", "extract_page", {"args": {"url": bad}}))
+    assert launcher.opened == []
+
+
+def test_the_trip_proposal_opens_google_maps_directions_and_the_boba_shop():
+    layer, launcher, _ = make()
+    layer(trip_proposal())
+    assert urls(launcher) == [
+        "https://www.google.com/maps/dir/?api=1&origin=San%20Francisco%20Caltrain%20Station&destination=Palo%20Alto%20Caltrain%20Station&travelmode=transit",
+        "https://www.google.com/maps/search/?api=1&query=Boba%20Guys%20Palo%20Alto",
+    ]
+
+
+def test_the_trip_without_a_boba_stop_opens_just_the_route(monkeypatch):
+    monkeypatch.setenv("CHIEF_HOME_STATION", "Millbrae")
+    layer, launcher, _ = make()
+    layer(trip_proposal("Caltrain to Mountain View"))
+    assert urls(launcher) == [
+        "https://www.google.com/maps/dir/?api=1&origin=Millbrae%20Caltrain%20Station&destination=Mountain%20View%20Caltrain%20Station&travelmode=transit"
+    ]
+
+
+def test_a_shop_name_with_an_apostrophe_still_opens_maps():
+    layer, launcher, _ = make()
+    layer(trip_proposal("Caltrain to Palo Alto + boba at Joe's Tea"))  # repr() then uses double quotes
+    assert urls(launcher)[1].endswith("query=Joe%27s%20Tea%20Palo%20Alto")
+
+
+def test_other_proposals_open_nothing():
+    layer, launcher, _ = make()
+    layer(trip_proposal(skill="audit"))
+    layer(ev("proposal", None, {"skill": "trip_planner", "actions": ["send_email(to='x@y.z')"]}))
+    layer(ev("proposal", None, {"skill": "trip_planner", "actions": []}))
+    assert launcher.opened == []
+
+
+def test_the_trip_searches_do_not_open_random_result_pages():
+    layer, launcher, _ = make()
+    results = [{"title": "t", "url": f"https://www.caltrain.com/p{i}"} for i in range(3)]
+    layer(ev("read", "search_web", {"args": {"objective": "Find Caltrain departures after 6:00 PM on Wednesday to Palo Alto."}, "result": results}))
+    layer(ev("read", "search_web", {"args": {"objective": "Find a well-reviewed boba tea shop near the station"}, "result": results}))
+    assert launcher.opened == []
+    layer(ev("read", "search_web", {"args": {"objective": "Find recent news about Acme"}, "result": results}))  # other searches still show their pages
+    assert len(launcher.opened) == 3
+
+
+def test_cached_trip_events_open_nothing():
+    layer, launcher, _ = make()
+    layer(ev("read", "extract_page", {"cached": True, "args": {"url": TIMETABLE}}))
+    p = trip_proposal()
+    p.detail["cached"] = True
+    layer(p)
+    assert launcher.opened == []
+
+
 @pytest.mark.parametrize(
     "bad",
     [

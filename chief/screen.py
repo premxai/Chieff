@@ -162,7 +162,39 @@ def _calendar(refresh: bool):
     return lambda layer, ev: [Target(calendar_url(layer.calendar_day(ev)), "calendar", refresh)]
 
 
+MAPS_DIRECTIONS = "https://www.google.com/maps/dir/?api=1&origin={o}&destination={d}&travelmode=transit"
+MAPS_SEARCH = "https://www.google.com/maps/search/?api=1&query={q}"
+# repr() writes the title in " when the shop name has a ', so close on the same quote that opened it
+_TRIP_TITLE = re.compile(r"""title=(?P<q>['"])Caltrain to (?P<dest>[^+]+?)(?: \+ boba at (?P<boba>.+?))?(?P=q)\s*[,)]""")
+_TRIP_SEARCHES = ("caltrain departures", "boba")  # trip_planner's own searches: the timetable page and Maps show these better
+
+
+def _read_page(layer: "ScreenLayer", ev: Activity) -> list[Target]:
+    """extract_page read a page (the Caltrain timetable): show that page, so the audience sees where the times came from."""
+    url = http_url((ev.detail.get("args") or {}).get("url"))
+    return [Target(url, "web", False, True)] if url else []
+
+
+def _trip_maps(layer: "ScreenLayer", ev: Activity) -> list[Target]:
+    """The trip proposal is ready: show the route in Google Maps (transit, between the two Caltrain stations) and the boba shop.
+    Only urls built here from the proposal's own title are opened, never anything from a web page."""
+    if ev.detail.get("skill") != "trip_planner":
+        return []
+    m = next((m for m in (_TRIP_TITLE.search(str(a)) for a in ev.detail.get("actions") or []) if m), None)
+    if not m:
+        return []
+    dest, boba = m.group("dest").strip(), (m.group("boba") or "").strip()
+    origin = os.getenv("CHIEF_HOME_STATION") or "San Francisco"
+    out = [Target(MAPS_DIRECTIONS.format(o=quote(f"{origin} Caltrain Station"), d=quote(f"{dest} Caltrain Station")), "web", False, True)]
+    if boba:
+        out.append(Target(MAPS_SEARCH.format(q=quote(f"{boba} {dest}")), "web", False, True))
+    return out
+
+
 def _search_pages(layer: "ScreenLayer", ev: Activity) -> list[Target]:
+    objective = str((ev.detail.get("args") or {}).get("objective") or "").lower()
+    if any(k in objective for k in _TRIP_SEARCHES):
+        return []  # a random top-three of result pages would only crowd out the timetable and the map
     urls: list[str] = []
     for item in ev.detail.get("result") or []:
         url = http_url(item.get("url")) if isinstance(item, dict) else None
@@ -184,6 +216,8 @@ ROUTES: dict[tuple[str, str], Callable[["ScreenLayer", Activity], list[Target]]]
     ("write", "create_draft"): _gmail(GMAIL_DRAFTS, True),
     ("write", "send_email"): _gmail(GMAIL_SENT, True),
     ("read", "search_web"): _search_pages,
+    ("read", "extract_page"): _read_page,
+    ("proposal", ""): _trip_maps,
 }
 
 

@@ -69,6 +69,20 @@ def test_the_yes_guard_does_not_block_a_real_request(rt, tools):
     assert 'Say "do it"' not in out["say"]
 
 
+def test_asking_again_while_it_is_waiting_says_so_instead_of_nothing(rt, tools):
+    handle_utterance(rt, "how's my week looking?")
+    out = handle_utterance(rt, "how's my week looking?")
+    assert "already waiting for your approval" in out["say"] and "Nothing worth" not in out["say"]
+    assert len(rt.gate.pending) == 1
+
+
+def test_asking_again_after_acting_says_it_already_acted(rt, tools):
+    handle_utterance(rt, "how's my week looking?")
+    handle_utterance(rt, "do it")
+    out = handle_utterance(rt, "how's my week looking?")
+    assert "already acted on that (audit)" in out["say"]
+
+
 def test_stripping_never_empties_a_command():
     assert _command("please") == "please"
     assert _command("chief") == "chief"
