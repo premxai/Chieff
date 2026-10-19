@@ -125,6 +125,9 @@ def default_runtime(cfg: Config):
         from chief import screen
 
         screen.attach(rt)
+    from chief.slack_post import attach_from_env
+
+    attach_from_env(rt)  # also post to Slack when SLACK_BOT_TOKEN and SLACK_CHANNEL are set
     return rt
 
 

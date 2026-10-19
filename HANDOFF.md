@@ -46,7 +46,7 @@ The owner's priorities: a demo that works live, honesty about what is real vs mo
 
 **NOT verified yet:**
 - `send_email` and `GMAIL_REPLY_TO_THREAD` (an approved send), `patch_event` with changed start/end times.
-- Slack Socket Mode (`slack-bolt` is not installed in the venv).
+- Slack, both the post-only mode and Socket Mode buttons: only fakes have been used, no real workspace.
 - **A real phone**: the microphone permission, hold-to-talk recording format and spoken replies on Android Chrome were not confirmed.
 - Whether Google Calendar refreshes on screen after an approved write without `CHIEF_SHOW_DEBUG_PORT` (rehearse; set it to 9222 if stale).
 - `demo`-mode failover with the network genuinely cut (only simulated with a bad key); approved writes with live down fail with an error by design.
@@ -107,6 +107,11 @@ the Gmail drafts that "Reply to Sam" saves (Chief has no delete-draft tool): del
 server (`POST /stop`) to drop that request's answer and anything it proposed, without remembering a decision. It cannot interrupt a skill
 mid-read, and it never touches an approval. Spoken replies are a short clean version (`chief/speech.py`: no tables, symbols or link text,
 a long brief becomes its title plus "The details are on the screen"); the full text stays on screen.
+
+**Slack (optional):** with `SLACK_BOT_TOKEN` (`xoxb-`, scope `chat:write`) and `SLACK_CHANNEL` in `.env`, the web server (and `chief demo`) also
+posts what you said, each result or proposal with its details and sources, and the approve, skip or stop outcome to that channel
+(`chief/slack_post.py`, post-only, no buttons; approving stays on the phone). Off when either variable is missing; a Slack failure is
+logged and dropped. Tested with a fake client only: **never posted to a real workspace.** Setup: `docs/slack-setup.md`.
 
 **Real windows for the trip:** the Caltrain timetable page opens when Chief reads it, then Google Maps transit directions between the two
 Caltrain stations and the boba shop open when the trip proposal appears (`chief/screen.py`). Cached or simulated results open nothing.

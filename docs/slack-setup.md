@@ -1,4 +1,16 @@
-# Slack setup (approval cards in a channel)
+# Slack setup
+
+Two ways to use Slack, and you can have either without the other:
+
+- **Post what Chief does (the web demo; start here).** The phone-and-Stage server posts to a channel: what you said, each result or
+  proposal with its details and sources, and whether it was approved, skipped or stopped. No buttons: you still approve on the phone.
+  It needs only two things, a bot token and a channel (steps 1, 3 and 4 below, with just `chat:write`). It turns on by itself when
+  `SLACK_BOT_TOKEN` and `SLACK_CHANNEL` are in `.env`, and says so at startup (`python -m chief web`, or `python -m chief demo`).
+  Leave them out and nothing changes. A Slack outage never affects Chief (posts run in the background, errors are dropped).
+  Details are in `chief/slack_post.py`.
+- **Approve from Slack (buttons).** `python -m chief slack`, below. This needs Socket Mode and the extra settings in step 2.
+
+# Slack approval cards in a channel
 
 Chief posts each proposal to a Slack channel with **Approve** and **Skip** buttons. It uses Socket
 Mode, so there is no public URL, tunnel or webhook to host.

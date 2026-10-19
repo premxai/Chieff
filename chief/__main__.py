@@ -105,6 +105,9 @@ def main(argv: list[str] | None = None) -> int:
         screen.attach(rt)
 
     if args.cmd == "web":
+        from chief.slack_post import attach_from_env
+
+        attach_from_env(rt)  # also post what Chief does to Slack, if SLACK_BOT_TOKEN and SLACK_CHANNEL are set
         return _serve_web(rt, args.host, args.port)
 
     if args.cmd == "skills":
