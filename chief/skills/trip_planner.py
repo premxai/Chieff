@@ -30,7 +30,9 @@ BUFFER_MIN = 10  # gap between "this" meeting ending and leaving
 
 _DEST = re.compile(
     r"\b(?:head(?:ing)?|go(?:ing)?|get(?:ting)?|travel(?:l?ing)?|commute|commuting)\s+(?:out\s+|down\s+|back\s+)?to\s+"
-    r"([a-z][a-z .'-]*?)(?=\s+(?:after|before|by|then|and|when|from|on|at|tomorrow|tonight|today)\b|[,.!?;]|$)",
+    r"([a-z][a-z .'-]*?)(?=\s+(?:after|before|by|then|and|when|from|on|at|tomorrow|tonight|today"
+    r"|can|could|would|will|please|find|get|give|show|book|plan|need|want|so|but|also|for|with|while|where|what|how|which|that"
+    r"|i|i'm|i'll|me|my|us|we|let's|lets)\b|[,.!?;]|$)",
     re.I,
 )
 _AFTER = re.compile(r"\bafter\s+(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?)?(?![a-z])", re.I)

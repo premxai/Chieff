@@ -43,6 +43,24 @@ def test_parse_request():
     assert parse_request("what's the weather", None) is None
 
 
+@pytest.mark.parametrize("said,dest", [
+    # spoken sentences run on without a comma: the destination must stop where the next request starts
+    ("I'm heading to Palo Alto can you find me a Cal Train after 8", "Palo Alto"),
+    ("heading to Palo Alto, can you find me a caltrain", "Palo Alto"),
+    ("I'm heading to Palo Alto please find me a train after 6", "Palo Alto"),
+    ("heading to Palo Alto I need a train and a boba place", "Palo Alto"),
+    ("Let's go to San Jose could you get me a train after 7:30pm", "San Jose"),
+    ("I want to head to Mountain View with a boba stop on the way", "Mountain View"),
+    ("head to Palo Alto so find me a Caltrain after 6", "Palo Alto"),
+])
+def test_a_spoken_run_on_request_keeps_only_the_place_as_the_destination(said, dest):
+    assert parse_request(said, None)[0] == dest
+
+
+def test_the_run_on_request_still_gets_its_time():
+    assert parse_request("I'm heading to Palo Alto can you find me a Cal Train after 8", None)[:2] == ("Palo Alto", time(20, 0))
+
+
 def test_full_ask_proposes_one_event_with_source(rt):
     out = handle_utterance(rt, ASK)
     p = out["proposal"]
