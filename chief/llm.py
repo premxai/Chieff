@@ -15,6 +15,7 @@ from chief.config import Config
 log = logging.getLogger("chief.llm")
 
 REQUEST_TIMEOUT = 20  # seconds: a slow model must not stall the stage; the fallback text answers instead
+VISION_TIMEOUT = 45  # reading a photo takes longer than phrasing a sentence
 
 
 def _message(r):
@@ -62,6 +63,32 @@ class LLM:
         except Exception as exc:  # network, quota, model errors: never break the loop
             log.warning("LLM call failed, using fallback: %s", exc)
             return fallback
+
+    def vision(self, system: str, user: str, image: bytes, mime: str) -> str | None:
+        """Ask the model about one image (an OpenAI-style image_url data URL). Returns its text, or None when no model is
+        configured or the call fails, so the caller can say plainly that it could not read the picture. The image and the
+        text in it are untrusted data: callers must treat the answer as data too."""
+        if not self.enabled:
+            return None
+        try:
+            import base64
+
+            if self._client is None:
+                from openai import OpenAI  # imported lazily: not needed in mock mode
+
+                self._client = OpenAI(base_url=self.cfg.llm_base_url, api_key=self.cfg.llm_api_key)
+            url = f"data:{mime};base64," + base64.b64encode(image).decode("ascii")
+            r = self._client.chat.completions.create(
+                model=self.cfg.llm_model, temperature=0, stream=False, timeout=VISION_TIMEOUT, max_tokens=900,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": [{"type": "text", "text": user}, {"type": "image_url", "image_url": {"url": url}}]},
+                ],
+            )
+            return (_message(r).content or "").strip() or None
+        except Exception as exc:  # network, quota, a model without vision: never break the loop
+            log.warning("LLM vision call failed: %s", type(exc).__name__)
+            return None
 
     def chat_with_tools(self, messages: list[dict], tool_schemas: list[dict]) -> dict | None:
         """One OpenAI-style tool-calling turn. Returns the assistant message as a plain dict:

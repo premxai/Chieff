@@ -108,6 +108,16 @@ server (`POST /stop`) to drop that request's answer and anything it proposed, wi
 mid-read, and it never touches an approval. Spoken replies are a short clean version (`chief/speech.py`: no tables, symbols or link text,
 a long brief becomes its title plus "The details are on the screen"); the full text stays on screen.
 
+**Vision, the `see` skill (`chief/skills/see.py`, route `POST /see`, button "Show Chief a photo" on the phone page):** a flyer, whiteboard, ticket
+or invoice photo is read by the model (`LLM.vision`, an image data URL through the same Cline API model) into fixed JSON fields; plain code then
+validates them (real date within a sane window, 24-hour time, short plain text with no links, at most 3 events), warns about overlaps with
+existing meetings, and builds the only action it can ever propose: `create_event`, through the approval gate. The picture is untrusted: an event
+whose own text reads like an instruction to an assistant is dropped, any such text is reported ("I ignored it"), and the model never chooses a tool.
+The page shrinks the photo (1600 px, JPEG) before upload; the server checks the real file signature (JPEG, PNG, WebP, GIF) and an 8 MB limit.
+Verified 2026-10-23 with the real model on two generated pictures (a normal flyer: right event; a flyer with a hijack message: only the real
+event, hijack flagged), and by tests with fakes. **Not yet tried with a real phone camera photo.** Depends on a vision-capable `CHIEF_LLM_MODEL`
+(`anthropic/claude-sonnet-4.6` and `moonshotai/kimi-k2.5` both read images through the Cline API).
+
 **Keenable (optional web provider):** `CHIEF_WEB_PROVIDER=keenable` swaps Parallel for Keenable for `search_web` and `extract_page`, keyless or with
 `KEENABLE_API_KEY`, falling back to Parallel if it is configured (`chief/tools/keenable.py`, `docs/live-tools.md`). Verified live keyless on
 2026-10-23: the trip step found the same train from Keenable's copy of the timetable. Default stays Parallel because its boba results are

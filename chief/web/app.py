@@ -23,11 +23,13 @@ from chief.chert import channel_from_env
 from chief.intent import handle_utterance
 from chief.models import Proposal
 from chief.runtime import Runtime
+from chief.skills.base import Attachment
 from chief.speech import spoken
 
 PAGE = Path(__file__).parent / "index.html"
 STAGE_PAGE = Path(__file__).parent / "stage.html"
 MAX_AUDIO_BYTES = 10 * 1024 * 1024
+MAX_IMAGE_BYTES = 8 * 1024 * 1024  # the phone page shrinks photos to a few hundred KB first; this is the hard stop
 MAX_TEXT_CHARS = 2000
 
 
@@ -63,6 +65,19 @@ class WhisperTranscriber:
         )
         resp.raise_for_status()
         return (resp.json().get("text") or "").strip()
+
+
+def sniff_image(data: bytes) -> str | None:
+    """The mime type of a picture judged by its own first bytes. Anything else (including HTML or a script renamed .jpg) is None."""
+    if data[:3] == b"\xff\xd8\xff":
+        return "image/jpeg"
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    if data[:6] in (b"GIF87a", b"GIF89a"):
+        return "image/gif"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    return None
 
 
 def _extension(content_type: str) -> str:
@@ -191,6 +206,54 @@ def create_app(rt: Runtime, token: str, transcriber: Transcriber | None = None) 
             raise HTTPException(404, "not enabled")
         status, body = await run_in_threadpool(chert.handle, dict(request.headers), await request.body())
         return JSONResponse(body, status_code=status)
+
+    # ---- show Chief a photo: a flyer, whiteboard, ticket or invoice becomes proposed calendar events ----------------------------
+
+    def read_picture(data: bytes, mime: str) -> dict:
+        with state.lock:
+            state.stop.clear()
+            state.busy, state.heard, state.steps = True, "You showed Chief a photo", ["Reading the picture"]
+            rt.bus.emit("heard", "You showed Chief a photo")
+            try:
+                proposal = rt.run_skill("see", request="photo", attachments=[Attachment(data, mime)])
+            except Exception as exc:
+                reply("Sorry, something went wrong reading that.", [f"Error: {type(exc).__name__}"])
+                raise HTTPException(500, "could not read the picture") from exc
+            finally:
+                state.busy = False
+            if state.stop.is_set():  # Stop was pressed while it read: nothing it proposed stays on the table
+                if proposal is not None:
+                    rt.gate.discard(proposal.id)
+                state.stop.clear()
+                reply("Stopped.", ["Stopped"])
+                return {"say": "Stopped.", "speak": "Stopped.", "steps": ["Stopped"], "proposal": None, "stopped": True}
+            if proposal is None:  # the same picture was already handled, or is still waiting
+                waiting = [p for p in rt.gate.pending.values() if p.skill == "see"]
+                say = ("That picture is already waiting for your approval: " + waiting[-1].summary) if waiting else \
+                    "I already dealt with that picture, so there is nothing new to add."
+            else:
+                say = proposal.summary
+                if proposal.actions:
+                    rt.conversation.last_proposal_ids = [proposal.id]  # so "approve all" covers it
+            rt.bus.emit("say", say, detail={"steps": ["Reading the picture"], "proposal_id": proposal.id if proposal else None})
+            steps = ["Reading the picture", "Proposal ready: approve or skip" if proposal is not None and proposal.actions else "Nothing to add"]
+            reply(say, steps)
+            return {
+                "say": say, "speak": spoken(say), "steps": steps,
+                "proposal": proposal_json(proposal) if proposal is not None and proposal.actions else None,
+            }
+
+    @app.post("/see", dependencies=auth)
+    async def see(image: UploadFile = File(...)) -> dict:
+        data = await image.read(MAX_IMAGE_BYTES + 1)
+        if not data:
+            raise HTTPException(400, "empty picture")
+        if len(data) > MAX_IMAGE_BYTES:
+            raise HTTPException(413, "picture too large")
+        mime = sniff_image(data)  # what the bytes are, not what the browser says
+        if mime is None:
+            raise HTTPException(415, "only JPEG, PNG, WebP or GIF pictures")
+        return await run_in_threadpool(read_picture, data, mime)
 
     @app.post("/stop", dependencies=auth)
     def stop() -> dict:

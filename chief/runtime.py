@@ -49,12 +49,15 @@ class Runtime:
     def now(self) -> datetime:
         return self.cfg.now or datetime.now()
 
-    def run_skill(self, name: str, now: datetime | None = None, request: str = "") -> Proposal | None:
+    def run_skill(self, name: str, now: datetime | None = None, request: str = "", attachments: list | None = None) -> Proposal | None:
         """Run one skill. None means it chose to stay silent or this situation was already handled."""
         now = now or self.now()
         skill = self.skills[name]
         self.bus.emit("step", f"Running {name}", detail={"skill": name, "request": request})
-        ctx = Context(ScopedTools(self.tools, skill.allowed_tools, skill.name), self.llm, self.memory, now, request, self.conversation.history())
+        ctx = Context(
+            ScopedTools(self.tools, skill.allowed_tools, skill.name), self.llm, self.memory, now, request,
+            self.conversation.history(), list(attachments or []),
+        )
         proposal = skill.run(ctx)
         if proposal is None:
             self.memory.log("no_reply", skill=name)

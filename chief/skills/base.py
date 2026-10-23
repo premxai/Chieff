@@ -24,6 +24,14 @@ from chief.models import Proposal
 from chief.tools import ScopedTools
 
 
+@dataclass(frozen=True)
+class Attachment:
+    """Something the user showed Chief: raw bytes and a mime type already checked against the bytes' own signature."""
+
+    data: bytes
+    mime: str  # "image/jpeg", "image/png", "image/webp" or "image/gif"
+
+
 @dataclass
 class Context:
     tools: ScopedTools  # reads only; writes must be proposed
@@ -32,6 +40,7 @@ class Context:
     now: datetime
     request: str = ""  # what the user said, when the skill was asked for (empty on a heartbeat)
     history: list[dict] = field(default_factory=list)  # recent turns [{"user", "chief"}], oldest first; context only
+    attachments: list[Attachment] = field(default_factory=list)  # pictures the user showed Chief (untrusted data)
 
 
 @dataclass
