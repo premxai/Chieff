@@ -43,6 +43,12 @@ def test_links_are_spoken_as_the_site_not_the_address():
     assert "caltrain.com" in out and "maps.apple.com" in out and "—" not in out
 
 
+def test_a_bulleted_list_is_read_as_sentences_not_as_dashes_and_colons():
+    out = spoken("I read a flyer and found 1 thing(s) for your calendar:\n- Startup Mixer: Thu Nov 12, 6:00 PM to 8:00 PM at The Foundry\nAdd it? Say yes.")
+    assert out == "I read a flyer and found 1 thing(s) for your calendar: Startup Mixer: Thu Nov 12, 6:00 PM to 8:00 PM at The Foundry. Add it? Say yes."
+    assert ":," not in out and ". -" not in out
+
+
 def test_an_inbox_style_reply_loses_its_dashes_and_marks():
     out = spoken("3 to answer: Sam Rivera (Deck for Friday? — by Friday), Maya Chen (Re: Q4 roadmap numbers).\nDeadline: Invoice 1042 — due Oct 30.")
     assert "—" not in out and "\n" not in out

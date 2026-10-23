@@ -34,12 +34,14 @@ def _is_document(text: str) -> bool:
 def _plain(text: str) -> str:
     text = _MD_LINK.sub(r"\1", text)
     text = _URL.sub(lambda m: _site(m.group(0)), text)
+    text = re.sub(r"(?m)^\s*[-•*]\s+", "", text)  # a list bullet at the start of a line is not a word or a pause
     text = re.sub(r"[`*_~>#]+", "", text)  # emphasis, code, quote and heading marks
     text = re.sub(r"\s*[—–]\s*", ", ", text)  # dashes in prose are a pause, not the word "dash"
     text = re.sub(r"\s+-\s+", ", ", text)
     text = re.sub(r"[|\\]+", " ", text)
     text = re.sub(r"\(\s*\)", "", text)  # parentheses emptied by removing a link
     text = re.sub(r"[\U0001F000-\U0001FAFF☀-➿]", "", text)  # emoji
+    text = re.sub(r"([:,;])\s*\n\s*", r"\1 ", text)  # a line break after a colon continues the sentence
     text = re.sub(r"\s*\n\s*", ". ", text)
     text = re.sub(r"\.(\s*\.)+", ".", text)
     text = re.sub(r"\s+([,.;:!?])", r"\1", text)
