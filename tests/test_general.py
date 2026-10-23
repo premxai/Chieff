@@ -254,3 +254,60 @@ def test_chat_with_tools_parses_an_openai_reply(tmp_path, monkeypatch):
 def test_heartbeat_never_runs_general(rt):
     assert rt.skills["general"].heartbeat is False
     assert all(p.skill != "general" for p in rt.tick())
+
+
+# --- keyword skills must not answer with a canned example when the model can actually help ------------------
+
+
+def test_a_boba_question_with_no_trip_goes_to_the_model_not_the_trip_planners_canned_example(cfg, tools, cards):
+    rt, llm = make_rt(cfg, tools, cards, [
+        calls(call("search_web", {"objective": "boba shops near the AWS Builder Loft in San Francisco", "queries": ["boba near AWS Builder Loft"]})),
+        say("Try Boba Guys on Market St, about a five minute walk."),
+    ])
+    tools.search_web = lambda objective, queries, max_results=5: [{"title": "Boba Guys", "url": "https://bobaguys.example", "excerpts": ["Boba on Market St"]}]
+    out = handle_utterance(rt, "can you find me a boba spot near AWS Builder Loft?")
+    assert out["say"] == "Try Boba Guys on Market St, about a five minute walk."
+    assert out["proposal"].skill == "general" and out["proposal"].sources == ["search_web"]
+    assert "couldn't plan a trip" not in out["say"] and "Palo Alto" not in out["say"]
+    assert "Boba Guys" in tool_messages(llm)[0]  # the real search result reached the model
+
+
+def test_a_real_trip_request_still_goes_to_the_trip_planner(cfg, tools, cards):
+    rt, llm = make_rt(cfg, tools, cards, [say("(should not be asked)")])
+    out = handle_utterance(rt, "I'm heading to Palo Alto after this, find me a Caltrain after 6 and a boba place on the way")
+    assert out["proposal"].skill == "trip_planner" and llm.turns == []
+
+
+def test_without_a_model_the_trip_planner_still_says_what_it_needs(cfg, tools, cards):
+    rt = Runtime(cfg, tools=tools, notify=cards.append)  # mock mode: no model to hand the request to
+    assert "couldn't plan a trip without a destination" in handle_utterance(rt, "find me a boba spot near the loft")["say"]
+
+
+def test_the_progress_panel_shows_what_chief_is_doing_while_it_works(cfg, tools, cards, monkeypatch):
+    import threading
+
+    from fastapi.testclient import TestClient
+
+    import chief.web.app as web
+
+    rt, _ = make_rt(cfg, tools, cards, [])
+    started, release = threading.Event(), threading.Event()
+
+    def slow(rt_, text):
+        rt_.bus.emit("working", "Searching the web...", tool="search_web")
+        rt_.bus.emit("working", "Reading your calendar...", tool="list_events")
+        started.set()
+        release.wait(5)
+        return {"say": "done", "steps": ["Running general"], "proposal": None, "proposals": []}
+
+    monkeypatch.setattr(web, "handle_utterance", slow)
+    c = TestClient(web.create_app(rt, "tok", transcriber=None))
+    h = {"X-Chief-Token": "tok"}
+    t = threading.Thread(target=lambda: c.post("/ask", json={"text": "find me a boba spot"}, headers=h))
+    t.start()
+    assert started.wait(5)
+    during = c.get("/status", headers=h).json()
+    release.set()
+    t.join(5)
+    assert during["busy"] is True and during["steps"][-2:] == ["Searching the web", "Reading your calendar"]
+    assert c.get("/status", headers=h).json()["steps"] == ["Running general"]  # the final steps replace the live ones

@@ -108,6 +108,12 @@ server (`POST /stop`) to drop that request's answer and anything it proposed, wi
 mid-read, and it never touches an approval. Spoken replies are a short clean version (`chief/speech.py`: no tables, symbols or link text,
 a long brief becomes its title plus "The details are on the screen"); the full text stays on screen.
 
+**Routing (`chief/intent.py`):** a keyword still picks a skill first ("boba", "caltrain", "inbox"), but if the skill cannot act on the request, the model
+answers it instead of the skill's canned example: `trip_planner` with no "head to <place>" ("find me a boba spot near the AWS loft") now goes to the
+`general` skill (read-only tools: web search, calendar, mail, sleep). Only with a model configured; without one the old canned reply remains.
+While a request runs, the phone page's Progress panel shows the live activity ("Searching the web", "Reading your calendar"). Typical free-form
+answers take 10 to 15 s (two model calls plus a search); a faster `CHIEF_LLM_MODEL` is the lever.
+
 **Vision, the `see` skill (`chief/skills/see.py`, route `POST /see`, button "Show Chief a photo" on the phone page):** any photo gets a plain
 description, and a question typed in the text box before tapping the button (or asked afterwards by text or voice, using the last picture kept in
 memory only: `Runtime.last_picture`, triggers like "this picture") is answered; read-only, nothing is proposed for a picture with no dates. First version

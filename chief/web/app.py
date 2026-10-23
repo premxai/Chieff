@@ -132,6 +132,17 @@ def create_app(rt: Runtime, token: str, transcriber: Transcriber | None = None) 
         state.say, state.steps = say, steps
         state.seq += 1
 
+    def follow(ev) -> None:
+        """While a request runs, show what Chief is doing right now ("Searching the web", "Reading your calendar") instead of only
+        "Thinking", so the wait on the phone page is visible progress."""
+        if not state.busy or ev.kind != "working":
+            return
+        label = ev.title.rstrip(".").strip()
+        if label and (not state.steps or state.steps[-1] != label):
+            state.steps = [*state.steps[-11:], label]
+
+    rt.bus.subscribe(follow)
+
     @app.get("/", dependencies=auth)
     def page() -> FileResponse:
         return FileResponse(PAGE, media_type="text/html", headers={"Cache-Control": "no-store"})

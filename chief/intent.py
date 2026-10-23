@@ -200,8 +200,23 @@ def _nothing(task: Task, rt: Runtime | None = None) -> str:
     return NOTHING
 
 
+def _needs_the_model(rt: Runtime, task: Task) -> bool:
+    """A keyword matched a skill, but the request does not have what that skill needs, so the skill would only answer with its canned
+    example ("try 'head to Palo Alto...'"). "Find me a boba spot near the AWS loft" has the word boba but no trip to plan: the model, with
+    web search and your calendar, should answer it instead."""
+    if not rt.llm.enabled or "general" not in rt.skills or task.skill == "general":
+        return False
+    if task.skill == "trip_planner":
+        from chief.skills.trip_planner import parse_request
+
+        return parse_request(task.request, None) is None  # no "head to <place>"
+    return False
+
+
 def _run_task(rt: Runtime, task: Task, catch: bool) -> Proposal | None:
     """Runs one skill with its task id on every event it emits. Safe to call from a worker thread."""
+    if _needs_the_model(rt, task):
+        task.skill = "general"
     with task_scope(task.id):
         try:
             proposal = rt.run_skill(task.skill, request=task.request)
