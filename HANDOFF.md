@@ -108,7 +108,10 @@ server (`POST /stop`) to drop that request's answer and anything it proposed, wi
 mid-read, and it never touches an approval. Spoken replies are a short clean version (`chief/speech.py`: no tables, symbols or link text,
 a long brief becomes its title plus "The details are on the screen"); the full text stays on screen.
 
-**Vision, the `see` skill (`chief/skills/see.py`, route `POST /see`, button "Show Chief a photo" on the phone page):** a flyer, whiteboard, ticket
+**Vision, the `see` skill (`chief/skills/see.py`, route `POST /see`, button "Show Chief a photo" on the phone page):** any photo gets a plain
+description, and a question typed in the text box before tapping the button (or asked afterwards by text or voice, using the last picture kept in
+memory only: `Runtime.last_picture`, triggers like "this picture") is answered; read-only, nothing is proposed for a picture with no dates. First version
+was calendar-only and answered "nothing to add" for a bottle of olive oil. When there are dates, a flyer, whiteboard, ticket
 or invoice photo is read by the model (`LLM.vision`, an image data URL through the same Cline API model) into fixed JSON fields; plain code then
 validates them (real date within a sane window, 24-hour time, short plain text with no links, at most 3 events), warns about overlaps with
 existing meetings, and builds the only action it can ever propose: `create_event`, through the approval gate. The picture is untrusted: an event

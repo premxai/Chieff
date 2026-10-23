@@ -80,6 +80,7 @@
   <section>
     <button id="talk" type="button">Hold to talk</button>
     <button id="see" class="btn" type="button">Show Chief a photo</button>
+    <p class="hint">Anything: a flyer, a bill, a product, a place. Type a question in the box first if you want one answered.</p>
     <input id="seeFile" type="file" accept="image/*" hidden>
     <button id="stop" type="button" hidden>Stop</button>
     <p class="hint" id="talkHint">Hold the button while you speak, or tap once to start and again to stop.</p>
@@ -210,12 +211,15 @@
   async function seePhoto(file) {
     if (!file) return;
     setError("");
-    $("heard").textContent = "You showed Chief a photo";
+    const question = $("text").value.trim();  // whatever is typed in the box is your question about the picture
+    $("text").value = "";
+    $("heard").textContent = "You showed Chief a photo" + (question ? ": " + question : "");
     setBusy(true);
     controller = new AbortController();
     try {
       const form = new FormData();
       form.append("image", await shrink(file), "photo.jpg");
+      if (question) form.append("question", question);
       const out = await api("/see", { method: "POST", body: form, signal: controller.signal });
       $("say").textContent = out.say;
       $("say").classList.remove("empty");

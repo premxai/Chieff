@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Protocol
 
 import httpx
-from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from starlette.concurrency import run_in_threadpool
 
@@ -209,13 +209,14 @@ def create_app(rt: Runtime, token: str, transcriber: Transcriber | None = None) 
 
     # ---- show Chief a photo: a flyer, whiteboard, ticket or invoice becomes proposed calendar events ----------------------------
 
-    def read_picture(data: bytes, mime: str) -> dict:
+    def read_picture(data: bytes, mime: str, question: str = "") -> dict:
         with state.lock:
             state.stop.clear()
-            state.busy, state.heard, state.steps = True, "You showed Chief a photo", ["Reading the picture"]
-            rt.bus.emit("heard", "You showed Chief a photo")
+            said = "You showed Chief a photo" + (f" and asked: {question}" if question else "")
+            state.busy, state.heard, state.steps = True, said, ["Looking at the picture"]
+            rt.bus.emit("heard", said)
             try:
-                proposal = rt.run_skill("see", request="photo", attachments=[Attachment(data, mime)])
+                proposal = rt.run_skill("see", request=question, attachments=[Attachment(data, mime)])
             except Exception as exc:
                 reply("Sorry, something went wrong reading that.", [f"Error: {type(exc).__name__}"])
                 raise HTTPException(500, "could not read the picture") from exc
@@ -236,7 +237,7 @@ def create_app(rt: Runtime, token: str, transcriber: Transcriber | None = None) 
                 if proposal.actions:
                     rt.conversation.last_proposal_ids = [proposal.id]  # so "approve all" covers it
             rt.bus.emit("say", say, detail={"steps": ["Reading the picture"], "proposal_id": proposal.id if proposal else None})
-            steps = ["Reading the picture", "Proposal ready: approve or skip" if proposal is not None and proposal.actions else "Nothing to add"]
+            steps = ["Looking at the picture", "Proposal ready: approve or skip" if proposal is not None and proposal.actions else "Answer ready"]
             reply(say, steps)
             return {
                 "say": say, "speak": spoken(say), "steps": steps,
@@ -244,7 +245,7 @@ def create_app(rt: Runtime, token: str, transcriber: Transcriber | None = None) 
             }
 
     @app.post("/see", dependencies=auth)
-    async def see(image: UploadFile = File(...)) -> dict:
+    async def see(image: UploadFile = File(...), question: str = Form("")) -> dict:
         data = await image.read(MAX_IMAGE_BYTES + 1)
         if not data:
             raise HTTPException(400, "empty picture")
@@ -253,7 +254,7 @@ def create_app(rt: Runtime, token: str, transcriber: Transcriber | None = None) 
         mime = sniff_image(data)  # what the bytes are, not what the browser says
         if mime is None:
             raise HTTPException(415, "only JPEG, PNG, WebP or GIF pictures")
-        return await run_in_threadpool(read_picture, data, mime)
+        return await run_in_threadpool(read_picture, data, mime, " ".join(question.split())[:MAX_TEXT_CHARS])
 
     @app.post("/stop", dependencies=auth)
     def stop() -> dict:

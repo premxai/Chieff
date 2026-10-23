@@ -40,6 +40,7 @@ class Runtime:
         self.tools = RecordingTools(self.inner_tools, self.bus)  # what skills and the gate use: every call is reported
         self.llm = llm or LLM(cfg)
         self.memory = Memory(cfg.state_dir)
+        self.last_picture = None  # the last Attachment shown to the `see` skill; never written to disk
         self.conversation = Conversation()  # short-term context for follow-ups (chief/conversation.py)
         self.skills = load_skills()
         self.gate = ApprovalGate(
@@ -53,6 +54,11 @@ class Runtime:
         """Run one skill. None means it chose to stay silent or this situation was already handled."""
         now = now or self.now()
         skill = self.skills[name]
+        if name == "see":  # the last picture stays available for follow-up questions ("what is in this picture?"), in memory only
+            if attachments:
+                self.last_picture = attachments[0]
+            elif self.last_picture is not None and request.strip():
+                attachments = [self.last_picture]
         self.bus.emit("step", f"Running {name}", detail={"skill": name, "request": request})
         ctx = Context(
             ScopedTools(self.tools, skill.allowed_tools, skill.name), self.llm, self.memory, now, request,
