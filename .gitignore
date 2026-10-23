@@ -9,3 +9,4 @@ data/private/
 data/demo_cache.json*
 data/sleep.csv
 data/sample_health.csv
+chert-agent/
