@@ -108,6 +108,18 @@ server (`POST /stop`) to drop that request's answer and anything it proposed, wi
 mid-read, and it never touches an approval. Spoken replies are a short clean version (`chief/speech.py`: no tables, symbols or link text,
 a long brief becomes its title plus "The details are on the screen"); the full text stays on screen.
 
+**Keenable (optional web provider):** `CHIEF_WEB_PROVIDER=keenable` swaps Parallel for Keenable for `search_web` and `extract_page`, keyless or with
+`KEENABLE_API_KEY`, falling back to Parallel if it is configured (`chief/tools/keenable.py`, `docs/live-tools.md`). Verified live keyless on
+2026-10-23: the trip step found the same train from Keenable's copy of the timetable. Default stays Parallel because its boba results are
+real places.
+
+**Chert (FaceTime and iMessage) is not integrated.** Its docs (docs.trychert.com, read 2026-10-23) say the FaceTime API is in a controlled
+private preview. An outbound call is `POST https://facetime.trychert.com/api/v1/calls` with a `ftk_` project key, the project id and an
+outbound-enabled line (from onboarding or a sales call), it is audio only, and Chert expects you to run your own LiveKit agent (your own
+speech to text, model and text to speech). No transcript API is documented, so a spoken "yes" on a call could not be matched by Chief's plain-string
+approval without running our own speech to text on the call audio. Outbound calling also cannot be tried until Chert enables a line. The iMessage
+side was not read in detail.
+
 **Slack (optional):** with `SLACK_BOT_TOKEN` (`xoxb-`, scope `chat:write`) and `SLACK_CHANNEL` in `.env`, the web server (and `chief demo`) also
 posts what you said, each result or proposal with its details and sources, and the approve, skip or stop outcome to that channel
 (`chief/slack_post.py`, post-only, no buttons; approving stays on the phone). Off when either variable is missing; a Slack failure is

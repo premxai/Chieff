@@ -106,13 +106,19 @@ def _trains(results: list[dict], day: date, after: datetime) -> list[Train]:
     return [found[k] for k in sorted(found)]
 
 
+_ARTICLE = re.compile(r"\?|^(?:what|where|which|how|why|who|is|are|best|top|the best|\d+\s+best|\d+\s+top|list of)\b", re.I)
+
+
 def _boba_name(result: dict | None) -> str:
     """A short shop name for the event title from a search result title like 'Boba Guys in Palo Alto, CA - Apple Maps'.
     Web text is untrusted: one line, plain characters, at most 40 of them."""
     title = " ".join(str((result or {}).get("title") or "").split())
+    if _ARTICLE.search(title):
+        return ""  # a question or a "best of" article is not a shop name; the link still goes in the notes
     for sep in (" in ", " - ", " | ", " – ", " — ", ", "):
         title = title.split(sep)[0]
-    return re.sub(r"[^\w &'.+-]", "", title).strip()[:40].strip()
+    name = re.sub(r"[^\w &'.+-]", "", title).strip()[:40].strip()
+    return "" if len(name.split()) > 5 else name  # a long phrase is a headline, not a name
 
 
 def _timetable_trains(ctx: Context, day: date, dest: str, after: datetime) -> list[Train]:

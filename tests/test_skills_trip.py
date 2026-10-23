@@ -104,6 +104,10 @@ def test_approving_creates_the_calendar_event(rt, tools):
     ("Boba Guys in Palo Alto, CA United States - Apple Maps", "Boba Guys"),
     ("Tea Era | Yelp", "Tea Era"),
     ("Sharetea, Palo Alto", "Sharetea"),
+    ("What is the best boba tea place around Palo Alto?", ""),  # a question is not a shop
+    ("Best Boba in Palo Alto (2026 guide)", ""),
+    ("10 Best Bubble Tea Spots Near Caltrain", ""),
+    ("A very long headline about boba tea shops that goes on", ""),
     ("", ""),
 ])
 def test_boba_name_is_a_short_plain_one_liner(title, name):

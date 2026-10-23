@@ -76,6 +76,14 @@ Write session (created only when an approved write runs):
 \*only when `CHIEF_TIMEZONE` is set. `GMAIL_REPLY_TO_THREAD` is not in the original brief; it is used because `GMAIL_SEND_EMAIL` documents no `thread_id`.
 
 `search_web` -> Parallel Search, `mode="fast"`, `advanced_settings.max_results`, and `advanced_settings.source_policy.include_domains` from the `include_domains` argument (LiveTools only; MockTools ignores it) or `CHIEF_SEARCH_DOMAINS`.
+**Keenable instead of Parallel.** Set `CHIEF_WEB_PROVIDER=keenable` and `search_web` and `extract_page` go to Keenable's REST API
+(`chief/tools/keenable.py`; docs: https://docs.keenable.ai). It works with no key through Keenable's keyless `/public` endpoints
+(1,000 requests an hour per IP, shared); a `KEENABLE_API_KEY` (`keen_...`, free 100,000 requests a month) uses `/v1/search` and `/v1/fetch`
+and lifts the limit. A `site:caltrain.com` written in a query, or a pinned domain, becomes Keenable's `site` filter. If Keenable errors
+(rate limit, no credits, network) and `PARALLEL_API_KEY` is set, Parallel answers instead. Checked live on 2026-10-23: search takes about
+0.3 s, and fetching caltrain.com's weekday timetable gives the same 52 San Francisco to Palo Alto trips as Parallel (train 526, 6:20 to 6:59 PM).
+Not as good: its boba hits are articles (a Quora question), so the event title omits the shop name and only the link is kept.
+
 `extract_page(url, objective)` -> Parallel Extract with `full_content`, returned as `{"title", "url", "excerpts": [text]}`. Only public `https` URLs with a host and no credentials are accepted. `trip_planner` uses it on caltrain.com's weekday or weekend timetable and `chief/caltrain.py` turns the markdown tables into trips (the parser's rules, such as the ride-time check and the weekday and weekend train series, are in its module docstring). The page text is untrusted data: it is only matched against fixed patterns.
 `read_health` reads a CSV (`CHIEF_HEALTH_CSV` or `data/sleep.csv`; format of `chief/health.py`) and **raises if it is missing**, so the audit skill fails loudly in live mode until the file exists. `post_slack` uses `slack_sdk` with `SLACK_BOT_TOKEN` + `SLACK_CHANNEL`.
 
