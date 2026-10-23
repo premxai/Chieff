@@ -113,7 +113,12 @@ a long brief becomes its title plus "The details are on the screen"); the full t
 2026-10-23: the trip step found the same train from Keenable's copy of the timetable. Default stays Parallel because its boba results are
 real places.
 
-**Chert (FaceTime and iMessage) is not integrated.** Its docs (docs.trychert.com, read 2026-10-23) say the FaceTime API is in a controlled
+**Chert iMessage (optional, `chief/chert.py`, `docs/chert-setup.md`):** with `CHERT_SIGNING_SECRET` and `CHIEF_NOTIFY_PHONE` set, proposals are
+texted to you, and with `CHERT_WEBHOOK_SECRET` (written by `scripts/chert_subscribe.py`) a signed reply from your number is handled like
+something you said on the phone page (plain-string approval, never a model; only your number is obeyed; `/chert/webhook` is the one route
+outside the phone token). Built from the public docs and tested with fakes only: **never run against a real Chert account.**
+
+**Chert FaceTime is not integrated.** Its docs (docs.trychert.com, read 2026-10-23) say the FaceTime API is in a controlled
 private preview. An outbound call is `POST https://facetime.trychert.com/api/v1/calls` with a `ftk_` project key, the project id and an
 outbound-enabled line (from onboarding or a sales call), it is audio only, and Chert expects you to run your own LiveKit agent (your own
 speech to text, model and text to speech). No transcript API is documented, so a spoken "yes" on a call could not be matched by Chief's plain-string

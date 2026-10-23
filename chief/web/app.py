@@ -16,9 +16,10 @@ from typing import Protocol
 
 import httpx
 from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from starlette.concurrency import run_in_threadpool
 
+from chief.chert import channel_from_env
 from chief.intent import handle_utterance
 from chief.models import Proposal
 from chief.runtime import Runtime
@@ -165,6 +166,31 @@ def create_app(rt: Runtime, token: str, transcriber: Transcriber | None = None) 
                 "steps": list(out["steps"]),
                 "proposal": proposal_json(proposal) if proposal else None,
             }
+
+    # ---- iMessage through Chert (optional): proposals are texted to you, and your reply is handled like something you said ------
+
+    def text_reply(text: str) -> str:
+        """What you texted, run exactly like /ask, answered as the short spoken version."""
+        with state.lock:
+            state.stop.clear()
+            state.busy, state.heard, state.steps = True, text, ["Thinking"]
+            try:
+                out = handle_utterance(rt, text)
+            finally:
+                state.busy = False
+            reply(out["say"], list(out["steps"]))
+            return spoken(out["say"])
+
+    chert = channel_from_env(rt, text_reply)
+
+    @app.post("/chert/webhook")
+    async def chert_webhook(request: Request) -> JSONResponse:
+        """Chert's `message.received` webhook. Not behind the phone token (Chert cannot send one): it is accepted only with a
+        valid signature and only from your own number (see chief/chert.py)."""
+        if chert is None or not chert.inbound:
+            raise HTTPException(404, "not enabled")
+        status, body = await run_in_threadpool(chert.handle, dict(request.headers), await request.body())
+        return JSONResponse(body, status_code=status)
 
     @app.post("/stop", dependencies=auth)
     def stop() -> dict:
