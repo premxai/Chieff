@@ -24,6 +24,9 @@ The owner's priorities: a demo that works live, honesty about what is real vs mo
   listed as an attendee of every event, and seeded guests exist only in the description).
 - **Parallel:** `search_web` and the new `extract_page` (Parallel Extract, whole page) work. `trip_planner` read a real train from
   caltrain.com's weekday timetable through `chief/caltrain.py` (a validated markdown-table parser).
+- **Phone page (not yet tested on a real phone):** chat-style UI, live camera (`getUserMedia`, falls back to the gallery), Maps results
+  as "Open in Maps" chips (Google Maps links only; never read aloud), and file search by name in the `files` skill (`find ... on my
+  desktop`). It lists and opens the containing folder, never a file. Folders outside `demo/` stay off until `CHIEF_LOCAL_ROOTS` is set.
 - **Model:** the Cline API works with `anthropic/claude-sonnet-4.6` (the one in `.env`) and `moonshotai/kimi-k2.5`, text and tool calls.
   `deepseek/deepseek-chat` fails upstream and `minimax/minimax-m2.5` returned empty replies: **model IDs in older docs are stale**, use
   `https://api.cline.bot/api/v1/models`. Cline wraps replies as `{"data": ...}`; `chief/llm.py` unwraps it (before that fix Chief silently

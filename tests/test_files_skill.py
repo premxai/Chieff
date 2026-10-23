@@ -179,3 +179,89 @@ def test_triggers_route_here_and_not_to_open_brief(rt, home):
 
 def test_empty_request_stays_silent(rt, home):
     assert rt.run_skill("files", request="") is None
+
+
+# ---- finding a file by name (it lists matches and opens the FOLDER, never the file)
+
+
+@pytest.fixture
+def stocked(home):
+    (home["documents"] / "Acme" / "contract final.pdf").write_text("x", encoding="utf-8")
+    (home["desktop"] / "Notes" / "ideas.txt").write_text("x", encoding="utf-8")
+    (home["desktop"] / "setup.exe").write_text("x", encoding="utf-8")
+    return home
+
+
+def ask(rt, text):
+    return handle_utterance(rt, text)["say"]
+
+
+def test_find_lists_matches_with_the_folder_they_are_in_and_opens_nothing(rt, tools, stocked):
+    say = ask(rt, "find my pitch deck on my desktop")
+    assert 'I found 1 file matching "pitch deck" in Desktop' in say and "Pitch deck.pptx (in Desktop)" in say
+    assert 'Say "open the file pitch deck"' in say
+    assert not [c for c in tools.calls if c[0] in ("open_folder", "open_file")]
+
+
+def test_find_searches_inside_sub_folders(rt, tools, stocked):
+    say = ask(rt, "find the contract in my documents")
+    assert "contract final.pdf (in Documents/Acme)" in say
+
+
+def test_open_the_file_opens_the_containing_folder_and_never_the_file(rt, tools, stocked):
+    say = ask(rt, "open the file contract")
+    assert opened(tools) == [str(stocked["documents"] / "Acme")]
+    assert "contract final.pdf is in Documents/Acme" in say
+    assert not [c for c in tools.calls if c[0] == "open_file"]
+
+
+def test_several_matches_are_listed_and_nothing_is_opened(rt, tools, stocked):
+    say = ask(rt, "open the file pdf")
+    assert "Which one?" in say and "file0.pdf" in say and opened(tools) == []
+
+
+def test_no_match_says_so(rt, tools, stocked):
+    assert 'I didn\'t find a file matching "unicorn" in the folders I may open' in ask(rt, "find the file unicorn")
+
+
+def test_a_program_is_listed_but_its_folder_only_is_opened(rt, tools, stocked):
+    say = ask(rt, "open the file setup")
+    assert "setup.exe is in Desktop" in say and opened(tools) == [str(stocked["desktop"])]
+    assert not [c for c in tools.calls if c[0] == "open_file"]  # never launched
+
+
+def test_search_my_folder_for_a_name(rt, tools, stocked):
+    assert "file3.pdf (in Downloads)" in ask(rt, "search my downloads for file3")
+
+
+def test_an_unknown_folder_is_refused_and_says_what_can_be_opened(rt, tools, stocked):
+    say = ask(rt, "find the file pitch deck in my pictures")
+    assert 'I don\'t know a folder called "pictures"' in say and "I can open:" in say
+
+
+def test_a_folder_that_is_not_allowed_is_not_searched(rt, tools, stocked, monkeypatch):
+    monkeypatch.setenv("CHIEF_LOCAL_ROOTS", str(stocked["documents"]))  # Desktop is not on the list
+    say = ask(rt, "find my pitch deck on my desktop")
+    assert "Pitch deck" not in say and "I can open:" in say
+
+
+@pytest.mark.parametrize("said,expect", [
+    ("find me a boba spot near the loft", None), ("open my desktop", None), ("show me my downloads", None),
+    ("what's in my documents", None), ("find my budget on my desktop", ("budget", "my desktop", False)),
+    ("could you find the file budget", ("budget", "", False)), ("open the file pitch deck", ("pitch deck", "", True)),
+    ("search my documents for the contract", ("contract", "documents", False)),
+])
+def test_only_requests_about_files_are_treated_as_file_searches(said, expect):
+    assert files._find_request(said) == expect
+
+
+def test_whats_on_my_desktop_lists_it_like_whats_in(rt, tools, stocked):
+    say = ask(rt, "what's on my desktop?")
+    assert "Desktop holds" in say and "Pitch deck.pptx" in say and opened(tools) == []
+
+
+def test_a_search_is_bounded(rt, tools, stocked):
+    for i in range(files.SEARCH_FOLDERS + 20):
+        (stocked["downloads"] / f"deep{i}").mkdir()
+    ask(rt, "find the file zzz-not-here")
+    assert len([c for c in tools.calls if c[0] == "list_folder"]) <= files.SEARCH_FOLDERS

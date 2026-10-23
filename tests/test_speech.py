@@ -71,3 +71,9 @@ def test_empty_is_silent(text):
 def test_a_table_only_reply_is_not_read_symbol_by_symbol():
     out = spoken("| a | b |\n| --- | --- |\n| 1 | 2 |")
     assert out == ON_SCREEN
+
+
+def test_google_maps_links_are_not_read_aloud():
+    out = spoken("Here are two spots:\n- Boba Guys: 5 min walk. https://www.google.com/maps/search/?api=1&query=Boba+Guys+SF\n- Sharetea: 8 min. https://www.google.com/maps/search/?api=1&query=Sharetea+SF")
+    assert "google" not in out and "http" not in out and "query" not in out
+    assert "Boba Guys: 5 min walk." in out and "Sharetea: 8 min." in out

@@ -311,3 +311,8 @@ def test_the_progress_panel_shows_what_chief_is_doing_while_it_works(cfg, tools,
     t.join(5)
     assert during["busy"] is True and during["steps"][-2:] == ["Searching the web", "Reading your calendar"]
     assert c.get("/status", headers=h).json()["steps"] == ["Running general"]  # the final steps replace the live ones
+
+def test_the_system_prompt_asks_for_real_places_with_google_maps_links():
+    from chief.skills.general import SYSTEM
+
+    assert "PLACES:" in SYSTEM and "https://www.google.com/maps/search/?api=1&query=" in SYSTEM and "at most 5" in SYSTEM

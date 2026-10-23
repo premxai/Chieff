@@ -3,120 +3,163 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0f1115">
+<meta name="theme-color" content="#0e1117">
 <title>Chief</title>
 <style>
   :root {
-    --bg: #0f1115; --panel: #181b22; --line: #2a2f3a; --text: #eef1f6; --muted: #9aa3b2;
-    --accent: #5b8cff; --rec: #ff4d5e; --ok: #2fbf71; --warn: #f0b429;
+    --bg: #0e1117; --panel: #171b24; --panel2: #1e2330; --line: #2a3040; --text: #eef1f7; --muted: #98a2b5;
+    --accent: #6c8dff; --accent2: #8b6cff; --rec: #ff4d5e; --ok: #2fbf71; --warn: #f0b429;
+    --user: #3b5bdb; --chip: #202636;
   }
   @media (prefers-color-scheme: light) {
-    :root { --bg: #f5f6f8; --panel: #fff; --line: #dfe3ea; --text: #14171c; --muted: #5d6675; }
+    :root { --bg: #f3f5f9; --panel: #ffffff; --panel2: #eef1f7; --line: #dde2ec; --text: #12161d; --muted: #596377; --user: #3b5bdb; --chip: #e9edf6; }
   }
   * { box-sizing: border-box; }
+  html, body { height: 100%; }
   body {
     margin: 0; background: var(--bg); color: var(--text);
-    font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    padding: 16px; padding-bottom: max(16px, env(safe-area-inset-bottom));
+    font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: flex; flex-direction: column; max-width: 640px; margin-inline: auto;
   }
-  main { max-width: 560px; margin: 0 auto; display: grid; gap: 14px; }
-  header { display: flex; align-items: baseline; justify-content: space-between; }
-  h1 { margin: 0; font-size: 22px; }
-  .mode { font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 99px; padding: 2px 10px; }
-  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
-  .panel h2 { margin: 0 0 8px; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  header {
+    display: flex; align-items: center; gap: 10px; padding: 12px 16px; padding-top: max(12px, env(safe-area-inset-top));
+    border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(8px);
+    position: sticky; top: 0; z-index: 5;
+  }
+  .logo { width: 30px; height: 30px; border-radius: 9px; background: linear-gradient(135deg, var(--accent), var(--accent2)); display: grid; place-items: center; color: #fff; font-weight: 800; }
+  h1 { margin: 0; font-size: 19px; letter-spacing: .01em; }
+  .grow { flex: 1; }
+  .mode { font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 99px; padding: 3px 10px; }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+  .dot.busy { background: var(--warn); animation: blink 1s infinite; }
+  .dot.ok { background: var(--ok); }
+  @keyframes blink { 50% { opacity: .35; } }
+  .iconbtn { width: 38px; height: 38px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--text); font-size: 17px; cursor: pointer; }
+
+  #log { flex: 1; overflow-y: auto; padding: 14px 14px 8px; display: flex; flex-direction: column; gap: 10px; }
+  .msg { max-width: 92%; padding: 10px 13px; border-radius: 16px; word-break: break-word; }
+  .msg.you { align-self: flex-end; background: var(--user); color: #fff; border-bottom-right-radius: 5px; }
+  .msg.chief { align-self: flex-start; background: var(--panel); border: 1px solid var(--line); border-bottom-left-radius: 5px; }
+  .msg p { margin: 0 0 6px; } .msg p:last-child { margin-bottom: 0; }
+  .msg ul, .msg ol { margin: 4px 0 6px; padding-left: 20px; } .msg li { margin: 2px 0; }
+  .msg.chief .who { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; margin-bottom: 3px; }
+  .links { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  a.chip, .chip {
+    display: inline-flex; align-items: center; gap: 6px; padding: 7px 11px; border-radius: 99px; border: 1px solid var(--line);
+    background: var(--chip); color: var(--text); font-size: 14px; text-decoration: none; cursor: pointer; white-space: nowrap;
+  }
+  a.map { background: color-mix(in srgb, var(--accent) 18%, var(--chip)); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+  .empty { color: var(--muted); }
+  .hello { text-align: center; color: var(--muted); margin: auto 0; padding: 20px; }
+  .hello h2 { color: var(--text); font-size: 20px; margin: 0 0 6px; }
+
+  #progress { padding: 0 14px 6px; display: flex; flex-wrap: wrap; gap: 6px; }
+  #progress:empty { display: none; }
+  #progress .chip { font-size: 13px; padding: 5px 10px; }
+  #progress .chip.now { border-color: var(--warn); }
+
+  #pending { padding: 0 14px; display: grid; gap: 8px; }
+  #pending:empty { display: none; }
+  .card { border: 1px solid color-mix(in srgb, var(--ok) 55%, var(--line)); background: var(--panel); border-radius: 14px; padding: 12px; }
+  .card .skill { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; }
+  .card p { margin: 4px 0 6px; white-space: pre-wrap; }
+  .card ul { margin: 0 0 8px; padding-left: 18px; color: var(--muted); font-size: 13px; word-break: break-word; }
+  .card .hint { color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+  .row { display: flex; gap: 8px; } .row .btn { flex: 1; }
+  button.btn { padding: 11px 14px; border-radius: 11px; border: 1px solid var(--line); cursor: pointer; background: var(--panel2); color: var(--text); font-size: 16px; min-height: 44px; }
+  button.approve { background: var(--ok); border-color: var(--ok); color: #fff; font-weight: 700; }
+
+  #err { color: var(--warn); font-size: 14px; margin: 0; padding: 0 16px 6px; }
+  #err:empty { display: none; }
+
+  #dock { padding: 8px 12px; padding-bottom: max(10px, env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: var(--bg); position: sticky; bottom: 0; }
+  #chips { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 8px; scrollbar-width: none; }
+  #chips::-webkit-scrollbar { display: none; }
   #talk {
-    width: 100%; height: 150px; border-radius: 20px; border: 0; cursor: pointer;
-    background: var(--accent); color: #fff; font-size: 22px; font-weight: 600;
-    touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+    width: 100%; height: 58px; border-radius: 16px; border: 0; cursor: pointer; color: #fff; font-size: 18px; font-weight: 650;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; margin-bottom: 8px;
   }
   #talk.rec { background: var(--rec); animation: pulse 1.1s infinite; }
   #talk:disabled { opacity: .55; cursor: default; }
-  @keyframes pulse { 50% { box-shadow: 0 0 0 10px color-mix(in srgb, var(--rec) 25%, transparent); } }
-  .hint { color: var(--muted); font-size: 13px; margin: 6px 2px 0; }
-  form { display: flex; gap: 8px; }
-  input[type=text] {
-    flex: 1; min-width: 0; padding: 12px; border-radius: 10px; border: 1px solid var(--line);
-    background: var(--bg); color: var(--text); font-size: 16px;
-  }
-  button.btn {
-    padding: 12px 16px; border-radius: 10px; border: 1px solid var(--line); cursor: pointer;
-    background: var(--panel); color: var(--text); font-size: 16px; min-height: 44px;
-  }
-  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-  button.approve { background: var(--ok); border-color: var(--ok); color: #fff; font-weight: 600; }
-  .said { margin: 0 0 6px; color: var(--muted); font-size: 14px; }
-  .said:empty { display: none; }
-  #say { margin: 0; font-size: 18px; white-space: pre-wrap; }
-  .card { border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-top: 10px; }
-  .card:first-of-type { margin-top: 0; }
-  .card .skill { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
-  .card p { margin: 4px 0 8px; white-space: pre-wrap; }
-  .card ul { margin: 0 0 10px; padding-left: 18px; color: var(--muted); font-size: 14px; word-break: break-word; }
-  .row { display: flex; gap: 8px; }
-  .row .btn { flex: 1; }
-  ol#steps { margin: 0; padding-left: 20px; }
-  ol#steps li { padding: 2px 0; }
-  .empty { color: var(--muted); }
-  .opts { display: flex; flex-wrap: wrap; gap: 14px; color: var(--muted); font-size: 14px; }
-  .opts label { display: flex; align-items: center; gap: 6px; min-height: 32px; }
-  #err { color: var(--warn); font-size: 14px; margin: 0; }
-  #err:empty { display: none; }
-  #see { width: 100%; min-height: 52px; font-size: 17px; margin-top: 10px; }
-  #stop { width: 100%; min-height: 52px; font-size: 18px; font-weight: 600; border: 2px solid var(--warn); color: var(--warn); background: transparent; border-radius: 12px; margin-top: 10px; }
-  #stop[hidden] { display: none; }
-  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); margin-right: 6px; }
-  .dot.busy { background: var(--warn); }
-  .dot.ok { background: var(--ok); }
+  @keyframes pulse { 50% { box-shadow: 0 0 0 9px color-mix(in srgb, var(--rec) 25%, transparent); } }
+  #stop { width: 100%; height: 58px; border-radius: 16px; font-size: 18px; font-weight: 700; border: 2px solid var(--warn); color: var(--warn); background: transparent; margin-bottom: 8px; cursor: pointer; }
+  #stop[hidden], #talk[hidden] { display: none; }
+  #askForm { display: flex; gap: 8px; }
+  input[type=text] { flex: 1; min-width: 0; padding: 12px 14px; border-radius: 13px; border: 1px solid var(--line); background: var(--panel); color: var(--text); font-size: 16px; }
+  .send { background: var(--accent); border-color: var(--accent); color: #fff; }
+  #see { display: none; }
+
+  #settings { position: absolute; right: 12px; top: 58px; z-index: 9; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 10px 14px; display: grid; gap: 8px; box-shadow: 0 10px 30px rgba(0,0,0,.35); }
+  #settings[hidden] { display: none; }
+  #settings label { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
+
+  #camera { position: fixed; inset: 0; z-index: 20; background: #000; display: flex; flex-direction: column; }
+  #camera[hidden] { display: none; }
+  #camera video { flex: 1; width: 100%; min-height: 0; object-fit: cover; background: #000; }
+  #camera .bar { display: flex; align-items: center; justify-content: space-between; padding: 14px 22px; padding-bottom: max(18px, env(safe-area-inset-bottom)); background: rgba(0,0,0,.8); }
+  #camera .shutter { width: 70px; height: 70px; border-radius: 50%; border: 5px solid #fff; background: #ffffff55; cursor: pointer; }
+  #camera .shutter:active { background: #fff; }
+  #camera .side { color: #fff; background: #ffffff22; border: 0; border-radius: 12px; padding: 12px 16px; font-size: 15px; cursor: pointer; min-width: 90px; }
+  #camera .tip { position: absolute; top: max(14px, env(safe-area-inset-top)); left: 0; right: 0; text-align: center; color: #fff; font-size: 14px; text-shadow: 0 1px 4px #000; padding: 0 20px; }
 </style>
 </head>
 <body>
-<main>
   <header>
+    <div class="logo">C</div>
     <h1>Chief</h1>
+    <span class="dot" id="dot"></span>
+    <span class="grow"></span>
     <span class="mode" id="mode">connecting</span>
+    <button class="iconbtn" id="gear" type="button" aria-label="Settings">&#9881;</button>
   </header>
-
-  <section>
-    <button id="talk" type="button">Hold to talk</button>
-    <button id="see" class="btn" type="button">Show Chief a photo</button>
-    <p class="hint">Anything: a flyer, a bill, a product, a place. Type a question in the box first if you want one answered.</p>
-    <input id="seeFile" type="file" accept="image/*" hidden>
-    <button id="stop" type="button" hidden>Stop</button>
-    <p class="hint" id="talkHint">Hold the button while you speak, or tap once to start and again to stop.</p>
-  </section>
-
-  <section class="panel">
-    <form id="askForm">
-      <input id="text" type="text" autocomplete="off" enterkeyhint="send" placeholder="Or type: how's my week looking?">
-      <button class="btn primary" type="submit">Send</button>
-    </form>
-  </section>
-
-  <section class="panel">
-    <h2>Chief says</h2>
-    <p class="said" id="heard"></p>
-    <p id="say" class="empty">Nothing yet.</p>
-  </section>
-
-  <section class="panel">
-    <h2>Waiting for you</h2>
-    <div id="pending"><span class="empty">No proposals pending.</span></div>
-  </section>
-
-  <section class="panel">
-    <h2><span class="dot" id="dot"></span>Progress</h2>
-    <ol id="steps"><li class="empty">Idle.</li></ol>
-  </section>
-
-  <p id="err" role="status"></p>
-
-  <section class="opts">
+  <div id="settings" hidden>
     <label><input type="checkbox" id="speak" checked> Spoken replies</label>
     <label><input type="checkbox" id="browserSr"> Browser speech recognition (experimental)</label>
     <button class="btn" type="button" id="testVoice">Test voice</button>
-  </section>
-</main>
+    <button class="btn" type="button" id="see">Show Chief a photo</button>
+  </div>
+
+  <div id="log" aria-live="polite">
+    <div class="hello" id="hello">
+      <h2>What can I do?</h2>
+      Talk to me, type, or show me a photo. I'll only change your calendar or send mail after you say yes.
+    </div>
+  </div>
+
+  <div id="progress"></div>
+  <div id="pending"></div>
+  <p id="err" role="status"></p>
+
+  <div id="dock">
+    <div id="chips">
+      <button class="chip" data-ask="What's in my inbox?">Inbox</button>
+      <button class="chip" data-ask="How's my week looking?">My week</button>
+      <button class="chip" data-ask="Prep me for my meeting with Dana">Prep Dana</button>
+      <button class="chip" data-ask="Find me a boba spot near the AWS Builder Loft">Boba nearby</button>
+      <button class="chip" data-ask="Open my desktop">Open desktop</button>
+      <button class="chip" id="chipCam" type="button">&#128247; Camera</button>
+    </div>
+    <button id="talk" type="button">Hold to talk</button>
+    <button id="stop" type="button" hidden>Stop</button>
+    <form id="askForm">
+      <button class="btn" id="camBtn" type="button" aria-label="Camera">&#128247;</button>
+      <input id="text" type="text" autocomplete="off" enterkeyhint="send" placeholder="Ask anything, or type a question for a photo">
+      <button class="btn send" type="submit" aria-label="Send">&#10148;</button>
+    </form>
+    <input id="seeFile" type="file" accept="image/*" hidden>
+    <p class="empty" id="talkHint" style="margin:6px 2px 0;font-size:12px">Hold the button while you speak, or tap once to start and again to stop.</p>
+  </div>
+
+  <div id="camera" hidden>
+    <div class="tip" id="camTip">Point at a flyer, bill, product or place. Type a question first if you want one answered.</div>
+    <video id="camVideo" playsinline muted autoplay></video>
+    <div class="bar">
+      <button class="side" id="camClose" type="button">Close</button>
+      <button class="shutter" id="camShoot" type="button" aria-label="Take photo"></button>
+      <button class="side" id="camGallery" type="button">Gallery</button>
+    </div>
+  </div>
 
 <script>
 (() => {
@@ -130,9 +173,9 @@
   const talk = $("talk");
   let recorder = null, stream = null, chunks = [], pressedAt = 0, working = false;
   let recognition = null;
+  let controller = null;  // aborts the request in flight when Stop is pressed
 
   if (!SR) $("browserSr").parentElement.hidden = true;
-
   function setError(msg) { $("err").textContent = msg || ""; }
 
   async function api(path, opts = {}) {
@@ -143,6 +186,77 @@
       throw new Error(res.status === 401 ? "Wrong or missing token. Open the link Chief printed." : detail);
     }
     return res.json();
+  }
+
+  // ---- the conversation ------------------------------------------------------
+  // Replies are shown as text, never as HTML. Only Google Maps links become tappable ("Open in Maps"); every other address stays plain text.
+  const URL_RE = /https?:\/\/[^\s)\]>"'<]+/g;
+  const MAPS_RE = /^https:\/\/www\.google\.com\/maps\//;
+  function mapLabel(url) {
+    try {
+      const u = new URL(url);
+      const q = u.searchParams.get("query") || u.searchParams.get("destination") || "";
+      return q ? q.replace(/\+/g, " ").slice(0, 38) : "Open in Maps";
+    } catch (_) { return "Open in Maps"; }
+  }
+  function inline(parent, text) {
+    // **bold** and plain text only
+    const parts = text.split(/(\*\*[^*]+\*\*)/g);
+    for (const p of parts) {
+      if (!p) continue;
+      if (p.startsWith("**") && p.endsWith("**") && p.length > 4) { const b = document.createElement("strong"); b.textContent = p.slice(2, -2); parent.append(b); }
+      else parent.append(document.createTextNode(p));
+    }
+  }
+  function rich(text) {
+    const box = document.createElement("div");
+    const maps = [];
+    const clean = String(text || "").replace(URL_RE, (u) => {
+      const bare = u.replace(/[.,;:!?]+$/, "");
+      if (MAPS_RE.test(bare)) { if (!maps.includes(bare)) maps.push(bare); return ""; }
+      return u;
+    }).replace(/\(\s*\)|\[\s*\]/g, "").replace(/[ \t]+\n/g, "\n");
+    let list = null, listType = "";
+    const flush = () => { list = null; listType = ""; };
+    for (const raw of clean.split("\n")) {
+      const line = raw.replace(/^#+\s*/, "").trim();
+      if (!line) { flush(); continue; }
+      const bullet = line.match(/^[-*•]\s+(.*)$/), num = line.match(/^\d+[.)]\s+(.*)$/);
+      if (bullet || num) {
+        const t = bullet ? "ul" : "ol";
+        if (!list || listType !== t) { list = document.createElement(t); listType = t; box.append(list); }
+        const li = document.createElement("li"); inline(li, (bullet || num)[1]); list.append(li);
+      } else {
+        flush();
+        const p = document.createElement("p"); inline(p, line); box.append(p);
+      }
+    }
+    if (maps.length) {
+      const row = document.createElement("div"); row.className = "links";
+      for (const u of maps.slice(0, 6)) {
+        const a = document.createElement("a"); a.className = "chip map"; a.href = u; a.target = "_blank"; a.rel = "noopener noreferrer";
+        a.textContent = "📍 " + mapLabel(u); row.append(a);
+      }
+      box.append(row);
+    }
+    return box;
+  }
+  function addMsg(who, text) {
+    const hello = $("hello"); if (hello) hello.remove();
+    const m = document.createElement("div"); m.className = "msg " + who;
+    if (who === "chief") {
+      const w = document.createElement("div"); w.className = "who"; w.textContent = "Chief"; m.append(w);
+      m.append(rich(text));
+    } else { m.textContent = text; }
+    $("log").append(m);
+    $("log").scrollTop = $("log").scrollHeight;
+    return m;
+  }
+  let selfAnswered = false;  // a reply this page just showed itself, so the poll does not show it twice
+  function chiefSays(out) {
+    selfAnswered = true;
+    addMsg("chief", out.say);
+    speak(out.speak || out.say);  // the server sends a clean, short version to read aloud; the full text stays on screen
   }
 
   // ---- speech out -------------------------------------------------------
@@ -163,14 +277,14 @@
     speechSynthesis.speak(u);
   }
   $("testVoice").addEventListener("click", () => { primeSpeech(); speak("Hi, I'm Chief. Can you hear me?"); });
+  $("gear").addEventListener("click", () => { $("settings").hidden = !$("settings").hidden; });
 
   // ---- ask --------------------------------------------------------------
-  let controller = null;  // aborts the /ask that is in flight when Stop is pressed
   async function ask(text) {
     text = (text || "").trim();
     if (!text) return;
     setError("");
-    $("heard").textContent = "You: " + text;
+    addMsg("you", text);
     setBusy(true);
     controller = new AbortController();
     try {
@@ -180,9 +294,7 @@
         body: JSON.stringify({ text }),
         signal: controller.signal,
       });
-      $("say").textContent = out.say;
-      $("say").classList.remove("empty");
-      speak(out.speak || out.say);  // the server sends a clean, short version to read aloud; the full text stays on screen
+      chiefSays(out);
     } catch (e) {
       if (e.name !== "AbortError") setError(e.message);  // Stop aborts on purpose: not an error
     } finally {
@@ -213,7 +325,12 @@
     setError("");
     const question = $("text").value.trim();  // whatever is typed in the box is your question about the picture
     $("text").value = "";
-    $("heard").textContent = "You showed Chief a photo" + (question ? ": " + question : "");
+    const bubble = addMsg("you", "📷 " + (question || "Photo"));
+    try {
+      const url = URL.createObjectURL(file);
+      const img = document.createElement("img"); img.src = url; img.alt = "your photo"; img.style.cssText = "display:block;max-width:100%;max-height:180px;border-radius:10px;margin-top:6px";
+      img.onload = () => URL.revokeObjectURL(url); bubble.append(img); $("log").scrollTop = $("log").scrollHeight;
+    } catch (_) {}
     setBusy(true);
     controller = new AbortController();
     try {
@@ -221,9 +338,7 @@
       form.append("image", await shrink(file), "photo.jpg");
       if (question) form.append("question", question);
       const out = await api("/see", { method: "POST", body: form, signal: controller.signal });
-      $("say").textContent = out.say;
-      $("say").classList.remove("empty");
-      speak(out.speak || out.say);
+      chiefSays(out);
     } catch (e) {
       if (e.name !== "AbortError") setError(e.message);
     } finally {
@@ -232,8 +347,46 @@
       poll();
     }
   }
-  $("see").addEventListener("click", () => { primeSpeech(); $("seeFile").click(); });
+  $("see").addEventListener("click", () => { primeSpeech(); $("settings").hidden = true; $("seeFile").click(); });
   $("seeFile").addEventListener("change", (e) => { const f = e.target.files[0]; e.target.value = ""; seePhoto(f); });
+
+  // ---- live camera ----------------------------------------------------------
+  let camStream = null;
+  async function openCamera() {
+    primeSpeech();
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { $("seeFile").click(); return; }
+    try {
+      camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 } }, audio: false });
+    } catch (e) {
+      setError("Camera blocked (" + e.name + "). Allow it in the site settings, or pick a photo from the gallery.");
+      $("seeFile").click();
+      return;
+    }
+    $("camVideo").srcObject = camStream;
+    $("camera").hidden = false;
+  }
+  function closeCamera() {
+    if (camStream) camStream.getTracks().forEach((t) => t.stop());
+    camStream = null;
+    $("camVideo").srcObject = null;
+    $("camera").hidden = true;
+  }
+  async function shoot() {
+    const v = $("camVideo");
+    if (!v.videoWidth) return;
+    const scale = Math.min(1, 1600 / Math.max(v.videoWidth, v.videoHeight));
+    const c = document.createElement("canvas");
+    c.width = Math.round(v.videoWidth * scale); c.height = Math.round(v.videoHeight * scale);
+    c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
+    const blob = await new Promise((res) => c.toBlob(res, "image/jpeg", 0.88));
+    closeCamera();
+    if (blob) seePhoto(blob);
+  }
+  $("camBtn").addEventListener("click", openCamera);
+  $("chipCam").addEventListener("click", openCamera);
+  $("camClose").addEventListener("click", closeCamera);
+  $("camShoot").addEventListener("click", shoot);
+  $("camGallery").addEventListener("click", () => { closeCamera(); $("seeFile").click(); });
 
   function setBusy(b) {
     working = b;
@@ -245,7 +398,9 @@
   // ---- stop ---------------------------------------------------------------
   const stopBtn = $("stop");
   function refreshStop() {
-    stopBtn.hidden = !(working || ("speechSynthesis" in window && speechSynthesis.speaking));
+    const show = working || ("speechSynthesis" in window && speechSynthesis.speaking);
+    stopBtn.hidden = !show;
+    talk.hidden = show;
   }
   setInterval(refreshStop, 250);
   stopBtn.addEventListener("click", async () => {
@@ -254,8 +409,8 @@
     if (controller) controller.abort();                         // stop waiting for the answer
     refreshStop();
     if (!wasWorking) return;
-    $("say").textContent = "Stopped.";
-    $("say").classList.remove("empty");
+    selfAnswered = true;
+    addMsg("chief", "Stopped.");
     try { await api("/stop", { method: "POST" }); } catch (_) {}  // the server drops that answer and anything it proposed
     poll();
   });
@@ -268,6 +423,9 @@
     box.value = "";
     ask(v);
   });
+  for (const chip of document.querySelectorAll("#chips [data-ask]")) {
+    chip.addEventListener("click", () => { primeSpeech(); if (!working) ask(chip.dataset.ask); });
+  }
 
   // ---- push to talk -----------------------------------------------------
   function pickMime() {
@@ -379,15 +537,9 @@
   function renderPending(list) {
     const box = $("pending");
     box.replaceChildren();
-    if (!list.length) {
-      const s = document.createElement("span");
-      s.className = "empty"; s.textContent = "No proposals pending.";
-      box.append(s);
-      return;
-    }
     for (const p of list) {
       const card = document.createElement("div"); card.className = "card";
-      const skill = document.createElement("div"); skill.className = "skill"; skill.textContent = p.skill;
+      const skill = document.createElement("div"); skill.className = "skill"; skill.textContent = "Waiting for your yes · " + p.skill;
       const sum = document.createElement("p"); sum.textContent = p.summary;
       const ul = document.createElement("ul");
       for (const a of p.actions) { const li = document.createElement("li"); li.textContent = a; ul.append(li); }
@@ -413,9 +565,7 @@
     setError("");
     try {
       const out = await api("/" + verb + "/" + encodeURIComponent(id), { method: "POST" });
-      $("say").textContent = out.say;
-      $("say").classList.remove("empty");
-      speak(out.speak || out.say);
+      chiefSays(out);
     } catch (e) {
       setError(e.message);
     }
@@ -423,22 +573,18 @@
   }
 
   function renderSteps(steps, busy) {
-    const ol = $("steps");
-    ol.replaceChildren();
-    if (!steps.length) {
-      const li = document.createElement("li"); li.className = "empty"; li.textContent = "Idle.";
-      ol.append(li);
+    const box = $("progress");
+    box.replaceChildren();
+    if (busy) {
+      steps.forEach((s, i) => {
+        const c = document.createElement("span"); c.className = "chip" + (i === steps.length - 1 ? " now" : "");
+        c.textContent = s + (i === steps.length - 1 ? "…" : ""); box.append(c);
+      });
     }
-    steps.forEach((s, i) => {
-      const li = document.createElement("li");
-      li.textContent = s;
-      if (busy && i === steps.length - 1) li.textContent += "…";
-      ol.append(li);
-    });
     $("dot").className = "dot " + (busy ? "busy" : steps.length ? "ok" : "");
   }
 
-  let lastPending = "";
+  let lastPending = "", lastSeq = null;
   async function poll() {
     try {
       const s = await api("/status");
@@ -446,7 +592,12 @@
       renderSteps(s.steps, s.busy);
       const sig = JSON.stringify(s.pending);
       if (sig !== lastPending) { lastPending = sig; renderPending(s.pending); }
-      if (s.heard && !$("heard").textContent) $("heard").textContent = "You: " + s.heard;
+      if (lastSeq !== null && s.seq !== lastSeq && !selfAnswered && s.say && !s.busy) {
+        // an answer to something asked somewhere else (a text message, Slack): show it here too
+        if (s.heard) addMsg("you", s.heard);
+        addMsg("chief", s.say);
+      }
+      if (s.seq !== lastSeq) { lastSeq = s.seq; selfAnswered = false; }
       if (!s.stt) $("talkHint").textContent = "Speech-to-text is not configured on the server (CHIEF_STT_API_KEY). Type instead.";
     } catch (e) {
       $("mode").textContent = "offline";

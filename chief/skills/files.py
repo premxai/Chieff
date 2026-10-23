@@ -25,7 +25,7 @@ SPOKEN = {  # extra spoken forms for the built-in names; custom roots answer to 
     "demo": ["demo", "demo folder"],
     "briefs": ["briefs"],
 }
-LIST_WORDS = ("what's in", "whats in", "what is in", "what's inside", "what is inside", "list", "contents of")
+LIST_WORDS = ("what's in", "whats in", "what is in", "what's on", "whats on", "what is on", "what's inside", "what is inside", "list", "contents of")
 OPEN_WORDS = ("open", "show me", "show", "pull up", "bring up", "go to", "look in", "look inside")
 FILLER = {"my", "the", "a", "an", "me", "up", "please", "folder", "directory", "dir", "files", "file"}
 PREPOSITIONS = (" in ", " on ", " inside ", " under ", " within ")
@@ -43,9 +43,15 @@ def _clean(name: str) -> str:
 def _triggers() -> list[str]:
     nouns = ["desktop", "documents", "downloads", "demo folder", "downloads folder", "documents folder", "briefs folder", "briefs"]
     verbs = ["open my", "open the", "show me my", "show me the", "pull up my", "pull up the"]
-    ask = ["what's in my", "what's in the", "whats in my", "what is in my", "what is in the"]
+    ask = ["what's in my", "what's in the", "whats in my", "what is in my", "what is in the", "what's on my", "whats on my", "what is on my"]
     out = [f"{v} {n}" for v in verbs + ask for n in nouns]
-    return out + ["open a folder", "open my folder", "open the folder", "open folder"]
+    out += ["open a folder", "open my folder", "open the folder", "open folder"]
+    # finding and opening one FILE by name: "find my budget on my desktop", "open the file pitch deck"
+    out += ["find the file", "find a file", "find my file", "find files", "find file", "look for a file", "look for the file", "locate the file",
+            "where is the file", "where is my file", "open the file", "open file", "open my file"]
+    for root in ("desktop", "documents", "downloads"):
+        out += [f"on my {root}", f"in my {root}", f"search my {root}", f"files on my {root}", f"files in my {root}"]
+    return out
 
 
 def _phrase(said: str) -> tuple[bool, str]:
@@ -98,11 +104,113 @@ def _sentence(listing: dict, label: str, opened: bool) -> str:
     return f"Opened {label} on your screen. {body}" if opened else f"{label} holds {body}"
 
 
+FIND_VERBS = ("find", "search for", "search", "look for", "locate", "where is", "where are")
+OPEN_VERBS = ("open", "show me", "show", "pull up", "bring up")
+POLITE = ("can you ", "could you ", "please ", "hey chief ", "chief ")
+NAME_FILLER = {"my", "the", "a", "an", "file", "files", "called", "named", "for", "me", "please", "document", "documents"}
+ROOT_WORDS = ("desktop", "documents", "downloads", "demo", "briefs")
+SEARCH_DEPTH, SEARCH_FOLDERS, SEARCH_HITS = 3, 60, 8
+
+
+def _find_request(said: str) -> tuple[str, str, bool] | None:
+    """(what to look for, which folder it was said to be in or "", open it?) when this is a request about a FILE, else None.
+    "find my budget on my desktop", "search my documents for the contract", "open the file pitch deck". A bare "open my desktop" is
+    a folder request, not this."""
+    for p in POLITE:
+        if said.startswith(p):
+            said = said[len(p):]
+    verb = next((v for v in sorted(FIND_VERBS + OPEN_VERBS, key=len, reverse=True) if said == v or said.startswith(v + " ")), None)
+    if verb is None:
+        return None
+    rest = said[len(verb):].strip()
+    opening = verb in OPEN_VERBS
+    words = rest.split()
+    mentions_file = "file" in words or "files" in words
+    if opening and not mentions_file:
+        return None  # "open my desktop" opens a folder
+    m = re.match(rf"^(?:my |the )?({'|'.join(ROOT_WORDS)}) (?:for|to find) (.+)$", rest)  # "search my desktop for budget"
+    if m:
+        name, root = m.group(2), m.group(1)
+    else:
+        before, after = _split_sub(rest)  # "budget on my desktop" -> ("budget", "my desktop"); no "on/in/from" -> ("", rest)
+        name, root = (before, after) if before else (rest, "")
+    mentions_root = bool(root) or any(r in words for r in ROOT_WORDS)
+    if not opening and not (mentions_file or mentions_root):
+        return None  # "find me a boba spot": not about files
+    query = " ".join(w for w in _norm(name).split() if w not in NAME_FILLER)
+    return query, root, opening
+
+
+def _search(ctx: Context, roots: list[Path], query: str) -> list[tuple[Path, str]]:
+    """Files whose name contains every word asked for, found by walking the allowed folders through list_folder (which re-checks the
+    allow-list on every call): (full path, the folder it is in, shown like 'Documents/Acme')."""
+    from collections import deque
+
+    tokens = _norm(query).split()
+    hits: list[tuple[Path, str]] = []
+    queue = deque((p, p.name, 0) for p in roots)
+    visited = 0
+    while queue and visited < SEARCH_FOLDERS and len(hits) < SEARCH_HITS:
+        path, label, depth = queue.popleft()
+        visited += 1
+        try:
+            entries = ctx.tools.list_folder(str(path))["entries"]
+        except Exception:
+            continue
+        for e in entries:
+            n = _norm(e["name"])
+            if e["kind"] == "file" and tokens and all(t in n for t in tokens):
+                hits.append((path / e["name"], label))
+            elif e["kind"] == "folder" and depth < SEARCH_DEPTH:
+                queue.append((path / e["name"], f"{label}/{_clean(e['name'])}", depth + 1))
+    return hits
+
+
+def _find(ctx: Context, folders: dict[str, list[Path]], query: str, root_phrase: str, opening: bool) -> Proposal:
+    if not query:
+        return Proposal(skill="files", summary="Which file? Say its name, for example: find my budget on my desktop.", actions=[], key="files:find:none")
+    if root_phrase:
+        name, why = resolve_root(root_phrase, folders)
+        if name is None:
+            return _refuse(why, folders, f"find:{_words(root_phrase) or 'none'}")
+        roots, where = [folders[name][0]], name.title() if name != "demo" else "the demo folder"
+    else:
+        seen: dict[str, Path] = {}
+        for paths in folders.values():
+            for p in paths:
+                seen.setdefault(str(p), p)
+        roots, where = list(seen.values()), "the folders I may open"
+    hits = _search(ctx, roots, query)
+    key = f"files:find:{query}:{where}"
+    if not hits:
+        return Proposal(skill="files", summary=f'I didn\'t find a file matching "{query}" in {where}.', actions=[], key=key + ":none")
+    lines = [f"- {_clean(p.name)} (in {label})" for p, label in hits]
+    plural = "files" if len(hits) > 1 else "file"
+    found = f'I found {len(hits)} {plural} matching "{query}" in {where}:\n' + "\n".join(lines)
+    if not opening:
+        tail = ' Say "open the file ..." with more of its name and I\'ll show its folder.' if len(hits) > 1 else f' Say "open the file {_words(_norm(hits[0][0].stem))}" and I\'ll show its folder.'
+        return Proposal(skill="files", summary=found + tail, actions=[], key=key)
+    if len(hits) > 1:
+        return Proposal(skill="files", summary=found + "\nWhich one? Say more of its name.", actions=[], key=key + ":many")
+    path, label = hits[0]
+    try:
+        res = ctx.tools.open_folder(str(path.parent))  # the folder, never the file: this skill only ever opens folders
+    except Exception as exc:
+        return Proposal(skill="files", summary=f"I found {_clean(path.name)} (in {label}) but couldn't open its folder: {exc}.", actions=[], key=key + ":refused")
+    mock = isinstance(res, dict) and bool(res.get("simulated"))
+    opened = (f"(Mock mode: nothing was really opened.) {_clean(path.name)} is in {label}." if mock
+              else f"{_clean(path.name)} is in {label}; I opened that folder on your screen.")
+    return Proposal(skill="files", summary=opened, actions=[], key=key + ":opened")
+
+
 def run(ctx: Context) -> Proposal | None:
     said = _norm(ctx.request)
     if not said:
         return None
     folders = named_folders(state_dir=ctx.memory.path.parent)
+    find = _find_request(said)
+    if find is not None:
+        return _find(ctx, folders, *find)
     only_list, phrase = _phrase(said)
     sub, root_phrase = _split_sub(phrase)
     if sub and not _words(sub):
@@ -144,7 +252,7 @@ def run(ctx: Context) -> Proposal | None:
 
 SKILL = Skill(
     name="files",
-    description="Open your desktop, documents, downloads or demo folder on screen and say what is in it (read-only).",
+    description="Open your desktop, documents, downloads or demo folder on screen and say what is in it; find a file by name and show the folder it is in (read-only, allow-listed folders; it never opens a file itself).",
     triggers=_triggers(),
     allowed_tools={"list_folder", "open_folder"},
     propose_tools=set(),

@@ -31,7 +31,11 @@ def _is_document(text: str) -> bool:
     return any(l.lstrip().startswith("#") or _TABLE_ROW.match(l) and "|" in l for l in lines) or any(_RULE.match(l) for l in lines)
 
 
+_MAPS = re.compile(r"https://www\.google\.com/maps/[^\s)\]>\"'<]+", re.I)
+
+
 def _plain(text: str) -> str:
+    text = _MAPS.sub("", text)  # a Google Maps link is a button on the screen, not something to read out
     text = _MD_LINK.sub(r"\1", text)
     text = _URL.sub(lambda m: _site(m.group(0)), text)
     text = re.sub(r"(?m)^\s*[-•*]\s+", "", text)  # a list bullet at the start of a line is not a word or a pause

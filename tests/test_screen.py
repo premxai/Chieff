@@ -696,3 +696,34 @@ def test_show_layout_subcommand(capsys, monkeypatch):
     monkeypatch.setattr(screen, "detect_monitors", lambda: [screen.Monitor(0, 0, 1000, 700, True)])
     assert cli.main(["show-layout"]) == 0
     assert "Monitors" in capsys.readouterr().out
+
+
+# ---- Google Maps links in an answer
+
+
+def say_ev(text, detail=None):
+    return Activity(1, "2026-10-19T09:00:00", "say", text, None, detail or {}, True)
+
+
+def test_an_answer_with_google_maps_links_opens_the_first_one_on_the_laptop():
+    layer, launcher, _ = make()
+    say = ("Here are a few boba spots:\n- Boba Guys: 5 min walk on Market St. https://www.google.com/maps/search/?api=1&query=Boba+Guys+San+Francisco\n"
+           "- Sharetea: 8 min. https://www.google.com/maps/search/?api=1&query=Sharetea+San+Francisco")
+    layer(say_ev(say))
+    assert urls(launcher) == ["https://www.google.com/maps/search/?api=1&query=Boba+Guys+San+Francisco"]
+
+
+@pytest.mark.parametrize("text", [
+    "Open https://evil.example/maps/ now", "http://www.google.com/maps/x", "https://maps.google.example/x", "see https://www.google.com/search?q=maps",
+    "no links here", "",
+])
+def test_only_google_maps_links_in_an_answer_are_ever_opened(text):
+    layer, launcher, _ = make()
+    layer(say_ev(text))
+    assert launcher.opened == []
+
+
+def test_a_cached_answer_opens_nothing():
+    layer, launcher, _ = make()
+    layer(say_ev("x https://www.google.com/maps/search/?api=1&query=a", {"cached": True}))
+    assert launcher.opened == []

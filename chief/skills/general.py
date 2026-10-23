@@ -42,6 +42,10 @@ SYSTEM = (
     f"{PROPOSE_TOOL} once, with a short summary and the exact actions. The user must approve before anything happens. "
     "You cannot send email, delete anything or post messages.\n"
     "- Never include links or addresses in a proposal unless the user gave them in their own request.\n"
+    "PLACES: when you recommend specific places (food, shops, venues, anything on a map), search the web first, use only real names "
+    "from the results, and give at most 5, one per line, like this: `- Name: one short reason, and how far or which street. "
+    "https://www.google.com/maps/search/?api=1&query=Name+and+area` (use + for spaces in the query). Those Google Maps links are the "
+    "only links you may put in an answer.\n"
     f"- Current time: {{now}}. Use ISO 8601 for times."
 )
 

@@ -191,6 +191,17 @@ def _trip_maps(layer: "ScreenLayer", ev: Activity) -> list[Target]:
     return out
 
 
+_MAPS_LINK = re.compile(r"https://www\.google\.com/maps/[^\s)\]>\"'<]+")
+
+
+def _say_maps(layer: "ScreenLayer", ev: Activity) -> list[Target]:
+    """Chief's answer named places with Google Maps links: show the first one in Maps on the laptop, so the audience sees the real map.
+    Only Google Maps links are opened, and the URL is checked like every other one."""
+    m = _MAPS_LINK.search(ev.title or "")
+    url = http_url(m.group(0).rstrip(".,;:!?")) if m else None
+    return [Target(url, "web", False, True)] if url else []
+
+
 def _search_pages(layer: "ScreenLayer", ev: Activity) -> list[Target]:
     objective = str((ev.detail.get("args") or {}).get("objective") or "").lower()
     if any(k in objective for k in _TRIP_SEARCHES):
@@ -218,6 +229,7 @@ ROUTES: dict[tuple[str, str], Callable[["ScreenLayer", Activity], list[Target]]]
     ("read", "search_web"): _search_pages,
     ("read", "extract_page"): _read_page,
     ("proposal", ""): _trip_maps,
+    ("say", ""): _say_maps,
 }
 
 
